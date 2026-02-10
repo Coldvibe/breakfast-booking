@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Breakfast Booking</title>
+  <style>
+    body { font-family: system-ui; background:#0b0f14; color:#e8eef6; margin:0; }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 16px; }
+    .card { background:#121a24; border:1px solid #1d2a3a; border-radius:16px; padding:16px; margin: 12px 0; }
+    input, button { width:100%; padding:12px; border-radius:12px; border:1px solid #24344a; background:#0b0f14; color:#e8eef6; }
+    button { background:#2f81f7; border:none; font-weight:700; cursor:pointer; }
+    .pill { display:inline-block; padding:6px 10px; border-radius:999px; background:#1b2635; margin:4px 4px 0 0; }
+    .muted { opacity:.75; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h2>Petit-déjeuner du {{ event.date }}</h2>
+      <div class="muted">Réservations: {{ "ouvertes" if event.open else "fermées" }}</div>
+      <div style="margin-top:10px">
+        {% for m in event.menu %}
+          <span class="pill">{{ m }}</span>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Réserver</h3>
+      <form method="post" action="/reserve">
+        <label>Ton nom</label>
+        <input name="name" placeholder="Ex: Ben" required />
+        <div style="height:10px"></div>
+
+        <label>Ce que tu prends (séparé par virgules)</label>
+        <input name="items" placeholder="Ex: Œufs, Pain" />
+        <div style="height:10px"></div>
+
+        <label>Tu ramènes quelque chose ?</label>
+        <input name="bring" placeholder="Ex: 1 paquet de pancakes" />
+        <div style="height:12px"></div>
+
+        <button type="submit">Valider la réservation</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3>Liste des réservations</h3>
+      {% if reservations|length == 0 %}
+        <div class="muted">Aucune réservation pour l’instant.</div>
+      {% endif %}
+      {% for r in reservations %}
+        <div style="padding:10px 0;border-bottom:1px solid #1d2a3a">
+          <strong>{{ r.name }}</strong><br />
+          <span class="muted">Prend:</span> {{ ", ".join(r["items"]) if r["items"] else "—" }}<br />
+          <span class="muted">Ramène:</span> {{ r.bring if r.bring else "—" }}
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="card">
+      <h3>Admin (MVP)</h3>
+      <form method="post" action="/admin/toggle">
+        <button type="submit">{{ "Fermer" if event.open else "Ouvrir" }} les réservations</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

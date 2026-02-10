@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin – Agents</title>
+  <style>
+    body { font-family: system-ui; background:#0b0f14; color:#e8eef6; margin:0 }
+    .wrap { max-width:900px; margin:auto; padding:16px }
+    .card { background:#121a24; border:1px solid #1d2a3a; border-radius:16px; padding:16px; margin-bottom:16px }
+    input, button { padding:10px; border-radius:10px; border:1px solid #24344a; background:#0b0f14; color:#e8eef6 }
+    button { background:#2f81f7; border:none; font-weight:700; cursor:pointer }
+    table { width:100%; border-collapse:collapse }
+    th, td { padding:8px; border-bottom:1px solid #1d2a3a; text-align:left }
+    .muted { opacity:.7 }
+    .row { display:flex; gap:8px; flex-wrap:wrap }
+    .badge { padding:4px 8px; border-radius:999px; font-size:12px }
+    .on { background:#1f6feb }
+    .off { background:#3a3f45 }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="card">
+    <h2>➕ Ajouter un agent</h2>
+    <form method="post" action="/admin/agents/add" class="row">
+      <input name="name" placeholder="Nom" required>
+      <input name="phone" placeholder="Téléphone (+32…)" required>
+      <label class="muted">
+        <input type="checkbox" name="whatsapp_optin"> WhatsApp autorisé
+      </label>
+      <button type="submit">Ajouter</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>👥 Agents</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Nom</th>
+          <th>Téléphone</th>
+          <th>WhatsApp</th>
+          <th>Actif</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for a in agents %}
+        <tr>
+          <td><strong>{{ a["name"] }}</strong></td>
+          <td>{{ a["phone"] }}</td>
+          <td>
+            <span class="badge {{ 'on' if a['whatsapp_optin'] else 'off' }}">
+              {{ 'Oui' if a['whatsapp_optin'] else 'Non' }}
+            </span>
+          </td>
+          <td>
+            <span class="badge {{ 'on' if a['is_active'] else 'off' }}">
+              {{ 'Actif' if a['is_active'] else 'Inactif' }}
+            </span>
+          </td>
+          <td class="row">
+            <form method="post" action="/admin/agents/toggle-active">
+              <input type="hidden" name="agent_id" value="{{ a['id'] }}">
+              <input type="hidden" name="is_active" value="{{ 0 if a['is_active'] else 1 }}">
+              <button type="submit">{{ 'Désactiver' if a['is_active'] else 'Activer' }}</button>
+            </form>
+
+            <form method="post" action="/admin/agents/toggle-whatsapp">
+              <input type="hidden" name="agent_id" value="{{ a['id'] }}">
+              <input type="hidden" name="whatsapp_optin" value="{{ 0 if a['whatsapp_optin'] else 1 }}">
+              <button type="submit">WhatsApp {{ 'OFF' if a['whatsapp_optin'] else 'ON' }}</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <a href="/" class="muted">← Retour à l’app</a>
+  </div>
+
+</div>
+</body>
+</html>

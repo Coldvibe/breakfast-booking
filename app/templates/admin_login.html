@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin — Login</title>
+  <style>
+    body{font-family:system-ui;background:#0b0f14;color:#e8eef6;margin:0}
+    .wrap{max-width:520px;margin:0 auto;padding:24px}
+    .card{background:#121a24;border:1px solid #1d2a3a;border-radius:16px;padding:18px}
+    input,button{width:100%;padding:12px;border-radius:12px;border:1px solid #24344a;background:#0b0f14;color:#e8eef6}
+    button{background:#2f81f7;border:none;font-weight:700;cursor:pointer}
+    .muted{opacity:.75}
+    .error{margin-top:10px;color:#ffb4b4}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h2>Connexion Admin</h2>
+    <div class="muted">Accès réservé.</div>
+
+    <form method="post" action="/admin/login" style="margin-top:14px">
+      <label>Utilisateur</label>
+      <input name="username" autocomplete="username" required>
+
+      <div style="height:10px"></div>
+
+      <label>Mot de passe</label>
+      <input name="password" type="password" autocomplete="current-password" required>
+
+      <div style="height:14px"></div>
+      <button type="submit">Se connecter</button>
+
+      {% if error %}
+        <div class="error">{{ error }}</div>
+      {% endif %}
+    </form>
+  </div>
+</div>
+</body>
+</html>

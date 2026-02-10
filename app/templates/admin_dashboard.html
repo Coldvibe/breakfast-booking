@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin — Dashboard</title>
+  <style>
+    body{font-family:system-ui;background:#0b0f14;color:#e8eef6;margin:0}
+    .wrap{max-width:920px;margin:0 auto;padding:16px}
+    .card{background:#121a24;border:1px solid #1d2a3a;border-radius:16px;padding:16px;margin:12px 0}
+    a{color:#9cc2ff;text-decoration:none}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    @media (max-width:720px){.grid{grid-template-columns:1fr}}
+    .btn{display:inline-block;padding:12px 14px;border-radius:12px;background:#2f81f7;color:#fff;font-weight:700}
+    .muted{opacity:.75}
+    form{display:inline}
+    button{padding:10px 12px;border-radius:12px;border:none;background:#3a3f45;color:#fff;cursor:pointer}
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="card">
+    <h2>🛠️ Admin</h2>
+    <div class="muted">Espace privé — menu semaine, agents, stats, stocks.</div>
+    <div style="margin-top:10px">
+      <form method="post" action="/admin/logout">
+        <button type="submit">Se déconnecter</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>📅 Menu de la semaine</h3>
+      <div class="muted">Créer / modifier le menu jour par jour.</div>
+      <div style="margin-top:12px">
+        <a class="btn" href="/admin/week-menu">Ouvrir</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>👥 Agents</h3>
+      <div class="muted">Gérer noms, numéros, opt-in WhatsApp.</div>
+      <div style="margin-top:12px">
+        <a class="btn" href="/admin/agents">Ouvrir</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>📊 Stats</h3>
+      <div class="muted">Réservations, participation, tendances.</div>
+      <div style="margin-top:12px">
+        <a class="btn" href="/admin/stats">Ouvrir</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>📦 Stocks</h3>
+      <div class="muted">Suivi basique (optionnel) : œufs, pain, etc.</div>
+      <div style="margin-top:12px">
+        <a class="btn" href="/admin/stocks">Ouvrir</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>📍 Agents de demain</h3>
+    <div class="muted">Sélection + WhatsApp.</div>
+    <div style="margin-top:12px">
+      <a class="btn" href="/admin/shifts">Ouvrir</a>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

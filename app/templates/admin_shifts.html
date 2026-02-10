@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin – Agents de demain</title>
+  <style>
+    body { font-family: system-ui; background:#0b0f14; color:#e8eef6; margin:0 }
+    .wrap { max-width:900px; margin:auto; padding:16px }
+    .card { background:#121a24; border:1px solid #1d2a3a; border-radius:16px; padding:16px; margin-bottom:16px }
+    button { padding:12px 14px; border-radius:12px; border:none; background:#2f81f7; color:#fff; font-weight:700; cursor:pointer }
+    .muted { opacity:.7 }
+    .agent { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 0; border-bottom:1px solid #1d2a3a }
+    .left { display:flex; flex-direction:column }
+    .name { font-weight:700 }
+    .phone { font-size:13px; opacity:.75 }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="card">
+    <h2>📅 Agents qui travaillent demain</h2>
+    <div class="muted">Date : <strong>{{ shift_date }}</strong></div>
+  </div>
+
+  <div class="card">
+    <form method="post" action="/admin/shifts/save">
+      <input type="hidden" name="shift_date" value="{{ shift_date }}">
+
+      {% if agents|length == 0 %}
+        <div class="muted">Aucun agent actif. Ajoute-en dans <a class="muted" href="/admin/agents">Admin → Agents</a>.</div>
+      {% endif %}
+
+      {% for a in agents %}
+        <div class="agent">
+          <div class="left">
+            <div class="name">{{ a["name"] }}</div>
+            <div class="phone">{{ a["phone"] }}</div>
+          </div>
+
+          <div>
+            <label>
+              <input
+                type="checkbox"
+                name="working_agent_ids"
+                value="{{ a['id'] }}"
+                {% if a["id"] in working_ids %}checked{% endif %}
+              >
+              Travaille
+            </label>
+          </div>
+        </div>
+      {% endfor %}
+
+      <div style="margin-top:14px">
+        <button type="submit">Enregistrer</button>
+      </div>
+      <hr style="margin:16px 0; border:0; border-top:1px solid #1d2a3a">
+
+<h3>📲 Notifier via WhatsApp</h3>
+<div class="muted">Uniquement les agents cochés + WhatsApp autorisé.</div>
+
+{% if working_agents|length == 0 %}
+  <div class="muted" style="margin-top:10px">Personne n’est coché pour demain.</div>
+{% else %}
+  <div style="margin-top:10px; display:flex; flex-direction:column; gap:10px;">
+    {% for a in working_agents %}
+      <div class="agent" style="border-bottom:1px solid #1d2a3a; padding-bottom:10px;">
+        <div class="left">
+          <div class="name">{{ a["name"] }}</div>
+          <div class="phone">{{ a["phone"] }}</div>
+        </div>
+
+        <div>
+          {% if wa_links.get(a["id"]) %}
+            <a href="{{ wa_links.get(a['id']) }}" target="_blank">
+              <button type="button">Ouvrir WhatsApp</button>
+            </a>
+          {% else %}
+            <span class="muted">WhatsApp non autorisé</span>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
+    </form>
+  </div>
+
+  <div class="card">
+    <a href="/admin/agents" class="muted">← Admin Agents</a> &nbsp; | &nbsp;
+    <a href="/" class="muted">← Retour à l’app</a>
+  </div>
+
+</div>
+</body>
+</html>
