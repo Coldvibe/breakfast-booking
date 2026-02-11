@@ -47,36 +47,45 @@
         </tr>
       </thead>
       <tbody>
-      {% for a in agents %}
-        <tr>
-          <td><strong>{{ a["name"] }}</strong></td>
-          <td>{{ a["phone"] }}</td>
-          <td>
-            <span class="badge {{ 'on' if a['whatsapp_optin'] else 'off' }}">
-              {{ 'Oui' if a['whatsapp_optin'] else 'Non' }}
-            </span>
-          </td>
-          <td>
-            <span class="badge {{ 'on' if a['is_active'] else 'off' }}">
-              {{ 'Actif' if a['is_active'] else 'Inactif' }}
-            </span>
-          </td>
-          <td class="row">
-            <form method="post" action="/admin/agents/toggle-active">
-              <input type="hidden" name="agent_id" value="{{ a['id'] }}">
-              <input type="hidden" name="is_active" value="{{ 0 if a['is_active'] else 1 }}">
-              <button type="submit">{{ 'Désactiver' if a['is_active'] else 'Activer' }}</button>
-            </form>
+{% for a in agents %}
+  <tr>
+    <form method="post" action="/admin/agents/update">
+      <td>
+        <input type="hidden" name="agent_id" value="{{ a['id'] }}">
+        <input name="name" value="{{ a['name'] }}" required style="width:100%">
+      </td>
 
-            <form method="post" action="/admin/agents/toggle-whatsapp">
-              <input type="hidden" name="agent_id" value="{{ a['id'] }}">
-              <input type="hidden" name="whatsapp_optin" value="{{ 0 if a['whatsapp_optin'] else 1 }}">
-              <button type="submit">WhatsApp {{ 'OFF' if a['whatsapp_optin'] else 'ON' }}</button>
-            </form>
-          </td>
-        </tr>
-      {% endfor %}
-      </tbody>
+      <td>
+        <input name="phone" value="{{ a['phone'] }}" required style="width:100%">
+      </td>
+
+      <td>
+        <label>
+          <input type="checkbox" name="whatsapp_optin" {% if a['whatsapp_optin'] %}checked{% endif %}>
+          Oui
+        </label>
+      </td>
+
+      <td>
+        <label>
+          <input type="checkbox" name="is_active" {% if a['is_active'] %}checked{% endif %}>
+          Actif
+        </label>
+      </td>
+
+      <td class="row">
+        <button type="submit">💾 Sauver</button>
+    </form>
+
+        <form method="post" action="/admin/agents/delete" onsubmit="return confirm('Désactiver cet agent ?');">
+          <input type="hidden" name="agent_id" value="{{ a['id'] }}">
+          <button type="submit" style="background:#3a3f45">🗑️ Désactiver</button>
+        </form>
+      </td>
+  </tr>
+{% endfor %}
+</tbody>
+
     </table>
   </div>
 

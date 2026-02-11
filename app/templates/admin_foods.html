@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin — Aliments</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="header">
+      <div class="brand">
+        <div class="logo egg-logo" aria-label="Zack & Snack">
+          <svg viewBox="0 0 64 64" width="28" height="28" aria-hidden="true">
+            <path d="M32 6 C20 6 10 18 10 30 c0 12 10 22 22 22 s22-10 22-22 C54 18 44 6 32 6Z"
+                  fill="#ffffff" opacity="0.95" />
+            <circle cx="32" cy="32" r="8" fill="#facc15"/>
+          </svg>
+        </div>
+        <div>
+          <h1>Aliments</h1>
+          <p>Catalogue des accompagnements (pain, charcuterie, etc.)</p>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <a class="btn secondary" href="/admin" style="text-decoration:none">Dashboard</a>
+        <a class="btn secondary" href="/" style="text-decoration:none">Accueil</a>
+      </div>
+    </div>
+
+    <div class="grid" style="grid-template-columns: 1fr 1fr;">
+      <div class="card">
+        <h2 class="card-title">Ajouter un aliment</h2>
+        <form class="form" method="post" action="/admin/foods/add">
+          <div>
+            <label>Nom</label>
+            <input name="name" placeholder="Ex: Pain" required>
+          </div>
+
+          <div>
+            <label>Unité (optionnel)</label>
+            <input name="unit" placeholder="Ex: pièce, portion, g, ml" value="unit">
+          </div>
+
+          <button class="btn" type="submit">Ajouter</button>
+          <div class="footer-note">Astuce : ré-ajouter un nom existant le réactive automatiquement.</div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">Liste</h2>
+
+        {% if foods|length == 0 %}
+          <div class="muted">Aucun aliment pour l’instant.</div>
+        {% else %}
+          <div class="list">
+            {% for f in foods %}
+              <div class="item" style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+                <div>
+                  <div class="name">{{ f["name"] }}</div>
+                  <div class="meta">
+                    <span class="muted">Unité :</span> {{ f["unit"] }}
+                    {% if not f["is_active"] %}
+                      • <span style="color:#ffd2d2">Inactif</span>
+                    {% endif %}
+                  </div>
+                </div>
+
+                <form method="post" action="/admin/foods/toggle">
+                  <input type="hidden" name="food_id" value="{{ f['id'] }}">
+                  <input type="hidden" name="is_active" value="{{ 0 if f['is_active'] else 1 }}">
+                  {% if f["is_active"] %}
+                    <button class="btn danger" type="submit">Désactiver</button>
+                  {% else %}
+                    <button class="btn secondary" type="submit">Réactiver</button>
+                  {% endif %}
+                </form>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

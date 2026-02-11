@@ -29,6 +29,11 @@
       </form>
     </div>
   </div>
+{% if flash %}
+  <div class="card" style="border-color:#2f81f7">
+    <strong>{{ flash["message"] }}</strong>
+  </div>
+{% endif %}
 
   <div class="grid">
     <div class="card">
@@ -71,6 +76,18 @@
       <a class="btn" href="/admin/shifts">Ouvrir</a>
     </div>
   </div>
+  <div class="card">
+  <h3>🔄 Sync menu de demain</h3>
+  <div class="muted">Force la mise à jour du menu de demain à partir du menu de la semaine.</div>
+  <div style="margin-top:12px">
+    <form method="post" action="/admin/sync-tomorrow">
+      <button type="submit" style="padding:12px 14px;border-radius:12px;border:none;background:#2f81f7;color:#fff;font-weight:700;cursor:pointer">
+        Synchroniser maintenant
+      </button>
+    </form>
+  </div>
+</div>
+
 
 </div>
 </body>
