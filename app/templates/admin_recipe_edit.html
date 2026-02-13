@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Modifier recette</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+<div class="container">
+
+  <div class="card">
+    <h2 class="card-title">✏️ Modifier recette</h2>
+
+    <form method="post">
+      <div class="form-group">
+        <label>Nom</label>
+        <input type="text" name="name"
+               value="{{ recipe.name }}"
+               required>
+      </div>
+
+      <div class="form-group">
+        <div class="toggle-row">
+  <span>Recette active</span>
+
+  <label class="switch">
+    <input type="checkbox"
+           name="is_active"
+           {% if recipe.is_active %}checked{% endif %}>
+    <span class="slider"></span>
+  </label>
+</div>
+
+      </div>
+
+      <div style="margin-top:15px; display:flex; gap:10px;">
+        <button class="btn" type="submit">
+          Enregistrer
+        </button>
+
+        <a class="btn secondary" href="/admin/recipes">
+          Annuler
+        </a>
+      </div>
+    </form>
+
+  </div>
+
+</div>
+</body>
+</html>

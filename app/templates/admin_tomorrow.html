@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin — Demain</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+<div class="container">
+
+  <!-- Header + navigation rapide -->
+  <div class="header">
+    <div class="brand">
+      <div class="logo egg-logo">
+        <svg viewBox="0 0 64 64" width="28" height="28" aria-hidden="true">
+          <path d="M32 6 C20 6 10 18 10 30 c0 12 10 22 22 22 s22-10 22-22 C54 18 44 6 32 6Z"
+                fill="#ffffff" opacity="0.95"/>
+          <circle cx="32" cy="32" r="8" fill="#facc15"></circle>
+        </svg>
+      </div>
+      <div>
+        <h1>Demain</h1>
+        <p>Configuration & suivi du petit-déjeuner</p>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <a class="btn secondary" href="/admin">← Dashboard</a>
+      <a class="btn secondary" href="/">Accueil</a>
+
+      <form method="post" action="/admin/logout">
+        <button class="btn danger" type="submit">Se déconnecter</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Infos globales "demain" -->
+  <div class="card">
+    <h2 class="card-title">📅 Petit-déjeuner du <b>{{ event["date"] }}</b></h2>
+
+    <div class="kpis">
+      <div class="kpi">
+        <b>{{ "Prévu" if event["is_planned"] else "Non prévu" }}</b>
+        <span>planning</span>
+      </div>
+      <div class="kpi">
+        <b>{{ "Ouvert" if event["open"] else "Fermé" }}</b>
+        <span>réservations</span>
+      </div>
+    </div>
+
+    <hr class="hr">
+
+    <!-- Actions rapides : planned + open/close -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <form method="post" action="/admin/toggle-planned">
+        <button class="btn secondary" type="submit">
+          {{ "Désactiver le petit-déjeuner" if event["is_planned"] else "Activer le petit-déjeuner" }}
+        </button>
+      </form>
+
+      <form method="post" action="/admin/toggle">
+        <button class="btn secondary" type="submit">
+          {{ "Fermer les réservations" if event["open"] else "Ouvrir les réservations" }}
+        </button>
+      </form>
+
+      <a class="btn" href="/admin/offers">Gérer les offres</a>
+      <a class="btn" href="/admin/shifts">Gérer les agents de demain</a>
+    </div>
+  </div>
+
+  <!-- Menu "texte" (pour rappel rapide) -->
+  <div class="card">
+    <h2 class="card-title">📝 Menu (rappel)</h2>
+    <div class="muted">Affichage simple, basé sur l’event de demain.</div>
+
+    <hr class="hr">
+
+    {% if event["menu"] and (event["menu"]|length > 0) %}
+      <div class="list">
+        {% for item in event["menu"] %}
+          <div class="item">
+            <div class="name">{{ item }}</div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="muted">Aucun item dans le menu.</div>
+    {% endif %}
+  </div>
+
+  <!-- Offres configurées -->
+  <div class="grid">
+
+    <!-- Mains -->
+    <div class="card">
+      <h2 class="card-title">🍳 Plats (MAIN)</h2>
+      {% if mains|length == 0 %}
+        <div class="muted">Aucun plat configuré.</div>
+      {% else %}
+        <div class="list">
+          {% for o in mains %}
+            <div class="item">
+              <div class="left">
+                <div class="name">{{ o["label"] }}</div>
+                <div class="meta">
+                  <span class="muted">Max/pers :</span> {{ o["max_per_person"] }}
+                  · <span class="muted">Actif :</span> {{ "Oui" if o["is_active"] else "Non" }}
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+      <div style="margin-top:12px">
+        <a class="btn secondary" href="/admin/offers">Modifier</a>
+      </div>
+    </div>
+
+    <!-- Sides -->
+    <div class="card">
+      <h2 class="card-title">🥖 Accompagnements (SIDE)</h2>
+      {% if sides|length == 0 %}
+        <div class="muted">Aucun accompagnement configuré.</div>
+      {% else %}
+        <div class="list">
+          {% for o in sides %}
+            <div class="item">
+              <div class="left">
+                <div class="name">{{ o["label"] }}</div>
+                <div class="meta">
+                  <span class="muted">Max/pers :</span> {{ o["max_per_person"] }}
+                  · <span class="muted">Actif :</span> {{ "Oui" if o["is_active"] else "Non" }}
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+      <div style="margin-top:12px">
+        <a class="btn secondary" href="/admin/offers">Modifier</a>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+</body>
+</html>

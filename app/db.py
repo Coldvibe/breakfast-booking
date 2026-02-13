@@ -73,16 +73,6 @@ def init_db() -> None:
         )
         conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS weekly_menus (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                week_start TEXT NOT NULL UNIQUE, -- lundi (YYYY-MM-DD)
-                menu_json TEXT NOT NULL,
-                created_at TEXT NOT NULL DEFAULT (datetime('now'))
-            );
-            """
-        )
-        conn.execute(
-            """
             CREATE TABLE IF NOT EXISTS foods (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE,
@@ -218,32 +208,6 @@ def set_event_planned(event_id: int, is_planned: bool) -> None:
             "UPDATE events SET is_planned = ? WHERE id = ?",
             (1 if is_planned else 0, event_id),
         )
-
-
-def upsert_event_menu_preserve_open(event_date: str, menu: list[str]) -> None:
-    """Met à jour le menu de l'event sans toucher is_open ni is_planned."""
-    with get_conn() as conn:
-        row = conn.execute(
-            "SELECT id FROM events WHERE event_date = ?",
-            (event_date,),
-        ).fetchone()
-
-        menu_json = json.dumps(menu, ensure_ascii=False)
-
-        if row:
-            conn.execute(
-                "UPDATE events SET menu_json = ? WHERE event_date = ?",
-                (menu_json, event_date),
-            )
-        else:
-            conn.execute(
-                """
-                INSERT INTO events (event_date, menu_json, is_open, is_planned)
-                VALUES (?, ?, 1, 1)
-                """,
-                (event_date, menu_json),
-            )
-
 
 # -------------------------
 # RESERVATIONS (legacy list)
@@ -425,34 +389,7 @@ def list_working_agents_for_date(shift_date: str) -> List[Dict[str, Any]]:
         ]
 
 
-# -------------------------
-# WEEKLY MENUS
-# -------------------------
 
-def get_weekly_menu(week_start: str) -> Optional[Dict[str, Any]]:
-    with get_conn() as conn:
-        row = conn.execute(
-            "SELECT week_start, menu_json FROM weekly_menus WHERE week_start = ?",
-            (week_start,),
-        ).fetchone()
-        if not row:
-            return None
-        return {
-            "week_start": row["week_start"],
-            "menu": json.loads(row["menu_json"]),
-        }
-
-
-def upsert_weekly_menu(week_start: str, menu: Dict[str, Any]) -> None:
-    with get_conn() as conn:
-        conn.execute(
-            """
-            INSERT INTO weekly_menus (week_start, menu_json)
-            VALUES (?, ?)
-            ON CONFLICT(week_start) DO UPDATE SET menu_json = excluded.menu_json
-            """,
-            (week_start, json.dumps(menu, ensure_ascii=False)),
-        )
 
 
 # -------------------------
@@ -744,3 +681,151 @@ def reservation_exists_for_event(event_id: int, name: str) -> bool:
             (event_id, name_norm),
         ).fetchone()
         return row is not None
+def get_tomorrow_admin_snapshot(event_date: str) -> dict:
+    """
+    Snapshot "admin demain" prêt à afficher sur le dashboard.
+    Centralise toutes les données utiles au lieu d'éparpiller les calls dans le router.
+    """
+    event = get_event(event_date)
+    if not event:
+        return {
+            "event": None,
+            "offers": {"mains": [], "sides": []},
+            "working_agents": [],
+            "reservations": [],
+            "totals": {"mains": [], "sides": []},
+            "brings": [],
+        }
+
+    offers = list_active_offers_for_date(event_date)
+    working_agents = list_working_agents_for_date(event_date)
+    reservations = list_reservations_with_lines(event["id"])
+
+    # --- Agrégations pour "vue globale" ---
+    totals_main: dict[str, int] = {}
+    totals_side: dict[str, int] = {}
+    brings: list[str] = []
+
+    for r in reservations:
+        bring = (r.get("bring") or "").strip()
+        if bring:
+            brings.append(bring)
+
+        for line in (r.get("lines") or []):
+            label = line.get("label") or ""
+            qty = int(line.get("qty") or 0)
+            if qty <= 0 or not label:
+                continue
+
+            if line.get("type") == "MAIN":
+                totals_main[label] = totals_main.get(label, 0) + qty
+            else:
+                totals_side[label] = totals_side.get(label, 0) + qty
+
+    # On trie pour un affichage stable
+    totals_main_list = [{"label": k, "qty": totals_main[k]} for k in sorted(totals_main.keys())]
+    totals_side_list = [{"label": k, "qty": totals_side[k]} for k in sorted(totals_side.keys())]
+
+    return {
+        "event": event,
+        "offers": offers,
+        "working_agents": working_agents,
+        "reservations": reservations,
+        "totals": {"mains": totals_main_list, "sides": totals_side_list},
+        "brings": brings,
+    }
+def get_tomorrow_admin_snapshot(event_date: str) -> dict:
+    """
+    Snapshot "cockpit admin" pour une date donnée (en pratique: demain).
+    On centralise ici ce que le dashboard admin doit afficher en un coup d'œil.
+
+    Retour attendu (dict):
+      - event: infos event (date, open, is_planned, menu...)
+      - offers: {"mains": [...], "sides": [...]}
+      - working_agents: liste des agents planifiés (shifts) pour la date
+      - reservations: liste des réservations avec lignes (MAIN/SIDE)
+      - kpis: petits compteurs utiles
+      - totals: totaux par label (pratique pour prévoir les quantités)
+    """
+    # 1) Event
+    event = get_event(event_date)
+
+    # 2) Offres actives (mains / sides)
+    offers = list_active_offers_for_date(event_date)  # déjà présent chez toi
+    mains = offers.get("mains", [])
+    sides = offers.get("sides", [])
+
+    # 3) Agents de shift (si tu as coché des agents pour demain)
+    working_agents = list_working_agents_for_date(event_date)
+
+    # 4) Réservations avec lignes (si l'event existe)
+    reservations = []
+    if event:
+        reservations = list_reservations_with_lines(event["id"])
+
+    # 5) KPIs + totaux
+    total_reservations = len(reservations)
+
+    totals_main: dict[str, int] = {}
+    totals_side: dict[str, int] = {}
+
+    for r in reservations:
+        for line in (r.get("lines") or []):
+            label = line.get("label") or "?"
+            qty = int(line.get("qty") or 0)
+            t = line.get("type")
+
+            if qty <= 0:
+                continue
+
+            if t == "MAIN":
+                totals_main[label] = totals_main.get(label, 0) + qty
+            else:
+                totals_side[label] = totals_side.get(label, 0) + qty
+
+    snapshot = {
+        "event": event,
+        "offers": {
+            "mains": mains,
+            "sides": sides,
+        },
+        "working_agents": working_agents,
+        "reservations": reservations,
+        "kpis": {
+            "reservations_count": total_reservations,
+            "working_agents_count": len(working_agents),
+            "mains_count": len(mains),
+            "sides_count": len(sides),
+        },
+        "totals": {
+            "mains": totals_main,
+            "sides": totals_side,
+        },
+    }
+
+    return snapshot
+def get_recipe(recipe_id: int) -> dict | None:
+    with get_conn() as conn:
+        r = conn.execute(
+            "SELECT id, name, is_active FROM recipes WHERE id = ?",
+            (recipe_id,),
+        ).fetchone()
+        if not r:
+            return None
+        return {"id": r["id"], "name": r["name"], "is_active": bool(r["is_active"])}
+
+
+def update_recipe(recipe_id: int, name: str, is_active: bool) -> None:
+    clean_name = name.strip()
+    if not clean_name:
+        raise ValueError("Recipe name is required")
+
+    with get_conn() as conn:
+        conn.execute(
+            """
+            UPDATE recipes
+            SET name = ?, is_active = ?
+            WHERE id = ?
+            """,
+            (clean_name, 1 if is_active else 0, recipe_id),
+        )

@@ -246,23 +246,6 @@
           </div>
         {% endif %}
 
-        {% if request.session.get("admin") %}
-          <hr class="hr">
-
-          <form method="post" action="/admin/toggle">
-            <button class="btn secondary" type="submit">
-              {{ "Fermer les réservations" if event["open"] else "Ouvrir les réservations" }}
-            </button>
-          </form>
-
-          <form method="post" action="/admin/toggle-planned" style="margin-top:10px">
-            <button class="btn secondary" type="submit">
-              {{ "Désactiver le petit-déjeuner demain" if event.get("is_planned", True) else "Activer le petit-déjeuner demain" }}
-            </button>
-          </form>
-
-          <div class="footer-note">Visible uniquement pour l’admin connecté.</div>
-        {% endif %}
       </div>
 
     </div>

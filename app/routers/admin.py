@@ -6,8 +6,10 @@ from datetime import date, timedelta
 import urllib.parse
 from typing import Optional
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Form, Request,  HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
+
+# + importe get_recipe, update_recipe
 
 from app.auth import admin_credentials_ok, is_admin_logged_in, require_admin
 from app.db import (
@@ -16,7 +18,7 @@ from app.db import (
     get_event,
     toggle_event_open,
     toggle_event_planned,
-    upsert_event_menu_preserve_open,
+    get_tomorrow_admin_snapshot,
     # agents
     list_agents,
     add_agent,
@@ -27,9 +29,6 @@ from app.db import (
     list_working_agent_ids,
     set_working_agents_for_date,
     list_working_agents_for_date,
-    # week menu
-    get_weekly_menu,
-    upsert_weekly_menu,
     # foods
     list_foods,
     add_food,
@@ -38,12 +37,16 @@ from app.db import (
     list_recipes,
     add_recipe,
     set_recipe_active,
+    get_recipe,
+    update_recipe,
+
     # offers
     list_offers_for_date,
     add_offer_main,
     add_offer_side,
     update_offer_max,
     set_offer_active,
+    
 )
 
 router = APIRouter()
@@ -153,15 +156,32 @@ def admin_logout(request: Request):
 
 @router.get("/admin", response_class=HTMLResponse)
 def admin_dashboard(request: Request):
+    # Protection admin
     guard = require_admin(request)
     if guard:
         return guard
 
+    # Flash message éventuel
     flash_data = request.app.state.pop_flash(request)
 
-    return _templates(request).TemplateResponse(
+    event_date = _tomorrow_str()
+    tomorrow_date = date.today() + timedelta(days=1)
+
+    # On garantit l’event de demain
+    ensure_event_for_date(
+        event_date,
+        request.app.state.menu_for_date(tomorrow_date)
+    )
+
+    snapshot = get_tomorrow_admin_snapshot(event_date)
+
+    return request.app.state.templates.TemplateResponse(
         "admin_dashboard.html",
-        {"request": request, "flash": flash_data},
+        {
+            "request": request,
+            "flash": flash_data,
+            "snapshot": snapshot,
+        },
     )
 
 
@@ -182,7 +202,7 @@ def admin_toggle(request: Request):
     if event:
         toggle_event_open(event["id"])
 
-    return RedirectResponse("/", status_code=303)
+    return RedirectResponse("/admin", status_code=303)
 
 
 @router.post("/admin/toggle-planned")
@@ -198,7 +218,7 @@ def admin_toggle_planned(request: Request):
     if event:
         toggle_event_planned(event["id"])
 
-    return RedirectResponse("/", status_code=303)
+    return RedirectResponse("/admin", status_code=303)
 
 
 # -------------------------
@@ -365,84 +385,6 @@ def admin_shifts_save(
     set_working_agents_for_date(shift_date, working_agent_ids)
     return RedirectResponse("/admin/shifts", status_code=303)
 
-
-# -------------------------
-# Weekly menu
-# -------------------------
-
-DAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
-
-
-def _monday_of_week(d: date) -> date:
-    return d - timedelta(days=d.weekday())
-
-
-@router.get("/admin/week-menu", response_class=HTMLResponse)
-def admin_week_menu(request: Request, week_start: Optional[str] = None):
-    guard = require_admin(request)
-    if guard:
-        return guard
-
-    # semaine courante par défaut
-    if not week_start:
-        week_start = _monday_of_week(date.today()).isoformat()
-
-    data = get_weekly_menu(week_start)
-    menu = data["menu"] if data else {d: [] for d in DAYS}
-
-    return _templates(request).TemplateResponse(
-        "admin_week_menu.html",
-        {"request": request, "week_start": week_start, "menu": menu, "days": DAYS},
-    )
-
-
-@router.post("/admin/week-menu/save")
-def admin_week_menu_save(
-    request: Request,
-    week_start: str = Form(...),
-    lundi: str = Form(""),
-    mardi: str = Form(""),
-    mercredi: str = Form(""),
-    jeudi: str = Form(""),
-    vendredi: str = Form(""),
-    samedi: str = Form(""),
-    dimanche: str = Form(""),
-):
-    guard = require_admin(request)
-    if guard:
-        return guard
-
-    def parse_items(s: str) -> list[str]:
-        return [x.strip() for x in s.split(",") if x.strip()]
-
-    menu = {
-        "lundi": parse_items(lundi),
-        "mardi": parse_items(mardi),
-        "mercredi": parse_items(mercredi),
-        "jeudi": parse_items(jeudi),
-        "vendredi": parse_items(vendredi),
-        "samedi": parse_items(samedi),
-        "dimanche": parse_items(dimanche),
-    }
-
-    upsert_weekly_menu(week_start, menu)
-    return RedirectResponse(f"/admin/week-menu?week_start={week_start}", status_code=303)
-
-
-@router.post("/admin/sync-tomorrow")
-def admin_sync_tomorrow(request: Request):
-    guard = require_admin(request)
-    if guard:
-        return guard
-
-    event_date = _tomorrow_str()
-    menu = _menu_for_tomorrow(request)
-
-    # On met à jour le menu de demain en gardant l’état open/closed
-    upsert_event_menu_preserve_open(event_date, menu)
-
-    _flash(request, "✅ Menu de demain synchronisé avec le menu de la semaine.")
-    return RedirectResponse("/admin", status_code=303)
 
 
 # -------------------------
@@ -622,3 +564,60 @@ def admin_offers_toggle(
 
     set_offer_active(offer_id, bool(is_active))
     return RedirectResponse("/admin/offers", status_code=303)
+@router.get("/admin/tomorrow", response_class=HTMLResponse)
+def admin_tomorrow(request: Request):
+    # Protection admin
+    guard = require_admin(request)
+    if guard:
+        return guard
+
+    event_date = _tomorrow_str()
+
+    # On garantit l'event de demain
+    ensure_event_for_date(event_date, _menu_for_tomorrow(request))
+    event = get_event(event_date)
+
+    offers = list_offers_for_date(event_date)
+
+    mains = [o for o in offers if o["offer_type"] == "MAIN"]
+    sides = [o for o in offers if o["offer_type"] == "SIDE"]
+
+    return _templates(request).TemplateResponse(
+        "admin_tomorrow.html",
+        {
+            "request": request,
+            "event": event,
+            "mains": mains,
+            "sides": sides,
+        },
+    )
+@router.get("/admin/recipes/edit/{recipe_id}", response_class=HTMLResponse)
+def admin_recipes_edit(request: Request, recipe_id: int):
+    guard = require_admin(request)
+    if guard:
+        return guard
+
+    recipe = get_recipe(recipe_id)
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recette introuvable")
+
+    return _templates(request).TemplateResponse(
+        "admin_recipe_edit.html",
+        {"request": request, "recipe": recipe},
+    )
+
+
+@router.post("/admin/recipes/edit/{recipe_id}")
+def admin_recipes_edit_post(
+    request: Request,
+    recipe_id: int,
+    name: str = Form(...),
+    is_active: bool = Form(False),
+):
+    guard = require_admin(request)
+    if guard:
+        return guard
+
+    update_recipe(recipe_id, name=name, is_active=is_active)
+    _flash(request, "✅ Recette mise à jour.")
+    return RedirectResponse("/admin/recipes", status_code=303)

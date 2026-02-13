@@ -13,7 +13,7 @@
   <div class="header">
     <div class="brand">
       <div class="logo egg-logo">
-        <svg viewBox="0 0 64 64" width="28" height="28">
+        <svg viewBox="0 0 64 64" width="28" height="28" aria-hidden="true">
           <path d="M32 6 C20 6 10 18 10 30 c0 12 10 22 22 22 s22-10 22-22 C54 18 44 6 32 6Z"
                 fill="#ffffff" opacity="0.95"/>
           <circle cx="32" cy="32" r="8" fill="#facc15"/>
@@ -35,47 +35,230 @@
   </div>
 
   {% if flash %}
-  <div class="card" style="border-color:rgba(59,130,246,.4)">
-    <strong>{{ flash["message"] }}</strong>
-  </div>
+    <div class="card" style="border-color:rgba(59,130,246,.4)">
+      <strong>{{ flash["message"] }}</strong>
+    </div>
   {% endif %}
 
-  <!-- SECTION OPÉRATIONNELLE -->
+  {# --- Snapshot "demain" envoyé par admin.py --- #}
+  {% set e = snapshot["event"] %}
+  {% set k = snapshot["kpis"] %}
+  {% set totals = snapshot["totals"] %}
+  {% set reservations = snapshot["reservations"] %}
+  {% set offers = snapshot["offers"] %}
+
+  <!-- COCKPIT DEMAIN -->
   <div class="card">
-    <h2 class="card-title">⚙️ Gestion opérationnelle</h2>
-    <div class="grid">
+    <h2 class="card-title">📅 Demain</h2>
 
-      <div class="card">
-        <h3>🍳 Offre de demain</h3>
-        <div class="muted">Définir plats & accompagnements + max/personne.</div>
-        <div style="margin-top:12px">
-          <a class="btn" href="/admin/offers">Gérer</a>
+    {% if not e %}
+      <div class="muted">Impossible de charger l’événement de demain.</div>
+    {% else %}
+
+      <!-- Status badges -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <div class="badge">
+          Date : <b>{{ e["date"] }}</b>
+        </div>
+
+        {% if e["is_planned"] %}
+          <div class="badge">Petit-déjeuner : <b>Prévu</b></div>
+        {% else %}
+          <div class="badge badge-danger">Petit-déjeuner : <b>Pas prévu</b></div>
+        {% endif %}
+
+        {% if e["open"] %}
+          <div class="badge">Réservations : <b>Ouvertes</b></div>
+        {% else %}
+          <div class="badge badge-danger">Réservations : <b>Fermées</b></div>
+        {% endif %}
+      </div>
+      {# --- Alertes / priorités (check rapide admin) --- #}
+      {% set alerts = [] %}
+
+      {% if not e["is_planned"] %}
+        {% set _ = alerts.append("Petit-déjeuner non prévu : personne ne pourra réserver tant que ce n’est pas activé.") %}
+      {% endif %}
+
+      {% if e["is_planned"] and (not e["open"]) %}
+        {% set _ = alerts.append("Réservations fermées : pense à les ouvrir si tu veux que les agents réservent.") %}
+      {% endif %}
+
+      {% if k["mains_count"] == 0 and k["sides_count"] == 0 %}
+        {% set _ = alerts.append("Aucune offre définie : ajoute au moins 1 plat ou 1 accompagnement.") %}
+      {% elif k["mains_count"] == 0 %}
+        {% set _ = alerts.append("Aucun plat (MAIN) défini : les gens ne pourront choisir que des accompagnements.") %}
+      {% endif %}
+
+      {% if k["working_agents_count"] == 0 %}
+        {% set _ = alerts.append("Aucun agent sélectionné pour demain : impossible de générer des liens WhatsApp utiles.") %}
+      {% endif %}
+
+      {% if alerts|length > 0 %}
+        <div class="notice" style="margin-top:12px">
+          <div class="notice-icon">⚠️</div>
+          <div class="notice-body">
+            <div class="notice-title">Priorités</div>
+            <ul style="margin:8px 0 0 18px">
+              {% for a in alerts %}
+                <li class="notice-text">{{ a }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+      {% else %}
+        <div class="notice" style="margin-top:12px;border-color:rgba(34,197,94,.35)">
+          <div class="notice-icon">✅</div>
+          <div class="notice-body">
+            <div class="notice-title">Tout est prêt</div>
+            <div class="notice-text">Offres OK, agents OK, et l’événement est configuré.</div>
+          </div>
+        </div>
+      {% endif %}
+
+      <hr class="hr">
+
+      <!-- KPI row -->
+      <div class="kpis">
+        <div class="kpi">
+          <b>{{ k["reservations_count"] }}</b>
+          <span>réservation(s)</span>
+        </div>
+        <div class="kpi">
+          <b>{{ k["working_agents_count"] }}</b>
+          <span>agent(s) shift</span>
+        </div>
+        <div class="kpi">
+          <b>{{ k["mains_count"] }}</b>
+          <span>plat(s)</span>
+        </div>
+        <div class="kpi">
+          <b>{{ k["sides_count"] }}</b>
+          <span>accompagnement(s)</span>
         </div>
       </div>
 
-      <div class="card">
-        <h3>📍 Agents de demain</h3>
-        <div class="muted">Sélection + génération liens WhatsApp.</div>
-        <div style="margin-top:12px">
-          <a class="btn" href="/admin/shifts">Gérer</a>
-        </div>
+      <!-- Actions -->
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:14px">
+        <form method="post" action="/admin/toggle">
+          <button class="btn secondary" type="submit">
+            {{ "Fermer les réservations" if e["open"] else "Ouvrir les réservations" }}
+          </button>
+        </form>
+
+        <form method="post" action="/admin/toggle-planned">
+          <button class="btn secondary" type="submit">
+            {{ "Désactiver petit-déjeuner demain" if e["is_planned"] else "Activer petit-déjeuner demain" }}
+          </button>
+        </form>
+
+        <a class="btn" href="/admin/offers">🍳 Gérer offres</a>
+        <a class="btn" href="/admin/shifts">📍 Gérer agents de demain</a>
       </div>
 
-      <div class="card">
-        <h3>📅 Menu de la semaine</h3>
-        <div class="muted">Planification jour par jour.</div>
-        <div style="margin-top:12px">
-          <a class="btn" href="/admin/week-menu">Ouvrir</a>
-        </div>
-      </div>
-
-    </div>
+    {% endif %}
   </div>
 
-  <!-- SECTION CATALOGUE -->
+  <!-- TOTAUX -->
   <div class="card">
-    <h2 class="card-title">📚 Catalogue</h2>
+    <h2 class="card-title">📦 Totaux (prépa)</h2>
+
+    {% if not e %}
+      <div class="muted">—</div>
+    {% else %}
+
+      <div class="grid">
+        <div class="card">
+          <h3>Plats</h3>
+          {% if totals["mains"] and totals["mains"]|length > 0 %}
+            <div class="list">
+              {% for label, qty in totals["mains"].items() %}
+                <div class="item">
+                  <div class="name">{{ label }}</div>
+                  <div class="meta"><b>{{ qty }}</b></div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="muted">Aucun plat réservé pour l’instant.</div>
+          {% endif %}
+        </div>
+
+        <div class="card">
+          <h3>Accompagnements</h3>
+          {% if totals["sides"] and totals["sides"]|length > 0 %}
+            <div class="list">
+              {% for label, qty in totals["sides"].items() %}
+                <div class="item">
+                  <div class="name">{{ label }}</div>
+                  <div class="meta"><b>{{ qty }}</b></div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="muted">Aucun accompagnement réservé pour l’instant.</div>
+          {% endif %}
+        </div>
+      </div>
+
+    {% endif %}
+  </div>
+
+  <!-- RÉSERVATIONS -->
+  <div class="card">
+    <h2 class="card-title">🧾 Commandes / Réservations</h2>
+
+    {% if not e %}
+      <div class="muted">—</div>
+    {% else %}
+
+      {% if reservations|length == 0 %}
+        <div class="muted">Aucune réservation pour l’instant.</div>
+      {% else %}
+        <div class="list">
+          {% for r in reservations %}
+            <div class="item">
+              <div class="name">{{ r["name"] }}</div>
+
+              <div class="meta" style="margin-top:6px">
+                {% if r["lines"] and (r["lines"]|length > 0) %}
+                  <div class="line-badges">
+                    {% for l in r["lines"] %}
+                      <span class="line-badge {% if l['type']=='MAIN' %}main{% else %}side{% endif %}">
+                        <span class="qty">{{ l["qty"] }}</span>
+                        {{ l["label"] }}
+                      </span>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <div class="muted">Choix : —</div>
+                {% endif %}
+
+                <div style="margin-top:10px">
+                  <span class="muted">Ramène :</span>
+                  {{ r["bring"] if r["bring"] else "—" }}
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+    {% endif %}
+  </div>
+
+  <!-- RACCOURCIS -->
+  <div class="card">
+    <h2 class="card-title">🧭 Accès rapide</h2>
     <div class="grid">
+
+      <div class="card">
+        <h3>👥 Agents</h3>
+        <div class="muted">Gestion complète des membres.</div>
+        <div style="margin-top:12px">
+          <a class="btn secondary" href="/admin/agents">Ouvrir</a>
+        </div>
+      </div>
 
       <div class="card">
         <h3>🥘 Plats / Recettes</h3>
@@ -90,42 +273,6 @@
         <div class="muted">Accompagnements & unités.</div>
         <div style="margin-top:12px">
           <a class="btn secondary" href="/admin/foods">Ouvrir</a>
-        </div>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- SECTION ADMINISTRATION -->
-  <div class="card">
-    <h2 class="card-title">🔐 Administration</h2>
-    <div class="grid">
-
-      <div class="card">
-        <h3>👥 Agents</h3>
-        <div class="muted">Gestion complète des membres.</div>
-        <div style="margin-top:12px">
-          <a class="btn secondary" href="/admin/agents">Ouvrir</a>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>🔄 Synchronisation</h3>
-        <div class="muted">Force la mise à jour du menu de demain.</div>
-        <div style="margin-top:12px">
-          <form method="post" action="/admin/sync-tomorrow">
-            <button class="btn secondary" type="submit">
-              Synchroniser maintenant
-            </button>
-          </form>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>📊 Stats (à venir)</h3>
-        <div class="muted">Participation & tendances.</div>
-        <div style="margin-top:12px">
-          <button class="btn secondary" disabled>Bientôt</button>
         </div>
       </div>
 

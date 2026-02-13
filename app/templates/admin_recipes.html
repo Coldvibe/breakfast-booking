@@ -61,6 +61,10 @@
               <form method="post" action="/admin/recipes/toggle">
                 <input type="hidden" name="recipe_id" value="{{ r['id'] }}">
                 <input type="hidden" name="is_active" value="{{ 0 if r['is_active'] else 1 }}">
+                <a class="btn secondary"
+     href="/admin/recipes/edit/{{ r.id }}">
+     ✏️ Modifier
+  </a>
                 {% if r["is_active"] %}
                   <button class="btn danger">Désactiver</button>
                 {% else %}

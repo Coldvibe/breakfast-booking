@@ -20,7 +20,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.db import init_db, get_weekly_menu
+from app.db import init_db
 from app.routers.public import router as public_router
 from app.routers.admin import router as admin_router
 
@@ -66,15 +66,10 @@ def monday_of_week(d: date) -> date:
 
 
 def menu_for_date(d: date) -> list[str]:
-    # Récupère le menu de la semaine (weekly_menus), sinon fallback sur DEFAULT_MENU
-    week_start = monday_of_week(d).isoformat()
-    data = get_weekly_menu(week_start)
-    if not data:
-        return DEFAULT_MENU
+    # Pour l’instant on garde un menu par défaut.
+    # (On passera ensuite sur une édition “menu de demain” côté admin)
+    return DEFAULT_MENU
 
-    day_key = DAYS[d.weekday()]
-    items = data["menu"].get(day_key, [])
-    return items if items else DEFAULT_MENU
 
 
 def tomorrow_str() -> str:
