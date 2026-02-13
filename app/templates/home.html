@@ -3,105 +3,195 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Zakfast – Réservation petit-déjeuner</title>
+  <title>Zack & Snack – Réservation petit-déjeuner</title>
   <link rel="stylesheet" href="/static/css/app.css">
 </head>
+
 <body>
   <div class="container">
 
+    <!-- HEADER -->
     <div class="header">
-  <div class="brand">
-    <div class="logo egg-logo" aria-label="Zack & Snack">
-      <!-- ton SVG oeuf ici -->
-      <svg viewBox="0 0 64 64" width="28" height="28" aria-hidden="true">
-        <path d="M32 6 C20 6 10 18 10 30 c0 12 10 22 22 22 s22-10 22-22 C54 18 44 6 32 6Z"
-              fill="#ffffff" opacity="0.95" />
-        <circle cx="32" cy="32" r="8" fill="#facc15"/>
-      </svg>
+      <div class="brand">
+        <div class="logo egg-logo" aria-label="Zack & Snack">
+          <svg viewBox="0 0 64 64" width="28" height="28" aria-hidden="true">
+            <path d="M32 6 C20 6 10 18 10 30 c0 12 10 22 22 22 s22-10 22-22 C54 18 44 6 32 6Z" fill="#ffffff" opacity="0.95"/>
+            <circle cx="32" cy="32" r="8" fill="#facc15"></circle>
+          </svg>
+        </div>
+        <div>
+          <h1>Zack & Snack</h1>
+          <p>Réservation petit-déjeuner</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <div class="badge">Petit-déjeuner du <b>{{ event["date"] }}</b></div>
+
+        <a
+          class="admin-lock {% if request.session.get('admin') %}unlocked{% else %}locked{% endif %}"
+          href="/admin/go"
+          title="{% if request.session.get('admin') %}Admin connecté{% else %}Accès admin{% endif %}"
+        >
+          {% if request.session.get("admin") %}🔓{% else %}🔒{% endif %}
+        </a>
+      </div>
     </div>
-    <div>
-      <h1>Zack & Snack</h1>
-      <p>Réservation petit-déjeuner • Équipe de Zakaria</p>
-    </div>
-  </div>
-
-  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-    <div class="badge">Petit-déjeuner du <b>{{ event["date"] }}</b></div>
-
-    <a class="admin-lock {% if request.session.get('admin') %}unlocked{% else %}locked{% endif %}"
-   href="/admin/go"
-   title="{% if request.session.get('admin') %}Admin connecté{% else %}Accès admin{% endif %}">
-  {% if request.session.get("admin") %}
-    🔓
-  {% else %}
-    🔒
-  {% endif %}
-</a>
-
-  
-    </a>
-  </div>
-</div>
-
 
     <div class="grid">
 
-      <!-- Colonne gauche -->
+      <!-- COLONNE GAUCHE : RESERVER -->
       <div class="card">
         <h2 class="card-title">Réserver</h2>
-        <div class="menu-box">
-  <div class="menu-title">Menu de demain</div>
-  <div class="menu-items">
-    {% for item in event.menu %}
-      <label class="menu-chip">
-        <input type="checkbox" value="{{ item }}">
-        <span>{{ item }}</span>
-      </label>
-    {% endfor %}
-  </div>
-</div>
 
-        <div class="muted">
-          Menu : <b>{{ ", ".join(event["menu"]) }}</b>
-        </div>
+        {% if flash %}
+          <div class="alert {{ flash.level }}">{{ flash.message }}</div>
+        {% endif %}
+
+        {# Badge global : planned + open #}
+        {% if not event.get("is_planned", True) %}
+          <div class="badge badge-danger">Petit-déjeuner désactivé</div>
+        {% elif event["open"] %}
+          <div class="badge">Réservations ouvertes</div>
+        {% else %}
+          <div class="badge badge-danger">Réservations fermées</div>
+        {% endif %}
 
         <hr class="hr">
 
-        {% if event["open"] %}
-          <div class="badge">Réservations ouvertes</div>
+        {% if not can_reserve %}
+          <!-- MESSAGE UNIQUE : remplace le form -->
+          <div class="notice">
+            <div class="notice-icon">
+              {% if reserve_reason == "secure" %}🔐
+              {% elif reserve_reason == "already" %}✅
+              {% elif reserve_reason == "no_offers" %}🍽️
+              {% elif reserve_reason == "not_planned" %}🥐
+              {% else %}⛔{% endif %}
+            </div>
+
+            <div class="notice-body">
+              <div class="notice-title">
+                {% if reserve_reason == "secure" %}Accès sécurisé requis
+                {% elif reserve_reason == "already" %}Déjà réservé
+                {% elif reserve_reason == "no_offers" %}Offres indisponibles
+                {% elif reserve_reason == "not_planned" %}Pas de petit-déjeuner
+                {% else %}Réservations indisponibles{% endif %}
+              </div>
+
+              <div class="notice-text">{{ reserve_message }}</div>
+
+              {% if reserve_reason == "secure" %}
+                <div class="notice-hint">Astuce : ouvre le lien WhatsApp directement sur ton téléphone.</div>
+              {% endif %}
+            </div>
+          </div>
+
         {% else %}
-          <div class="badge" style="border-color:rgba(239,68,68,.35);color:#ffd2d2;background:rgba(239,68,68,.08)">
-            Réservations fermées
-          </div>
+          <!-- FORM ACTIF -->
+          <form class="form" method="post" action="/reserve">
+            <div>
+              <label>Ton nom</label>
+
+              {% if name_locked %}
+                <input value="{{ prefill_name }}" readonly class="locked-input">
+                {# Le serveur force le nom depuis la DB, pas besoin de le renvoyer #}
+
+                <input type="hidden" name="agent" value="{{ agent_id }}">
+                <input type="hidden" name="d" value="{{ d }}">
+                <input type="hidden" name="k" value="{{ k }}">
+              {% else %}
+                <!-- normalement jamais visible si can_reserve = true (car on exige le lien) -->
+                <input name="name" placeholder="Ex: Ben" required>
+              {% endif %}
+            </div>
+
+            {% if (mains|length == 0) and (sides|length == 0) %}
+              <div class="muted">Aucune offre définie pour demain.</div>
+            {% else %}
+
+              {% if mains|length > 0 %}
+                <div class="menu-box">
+                  <div class="section-title">
+                    <h3>Plats</h3>
+                    <span class="pill main">Choix unique</span>
+                  </div>
+
+                  <div class="main-list">
+                    {% for o in mains %}
+                      <label class="main-card">
+                        <input class="main-radio" type="radio" name="main_choice" value="{{ o['id'] }}"/>
+
+                        <div class="main-body">
+                          <div class="main-title">{{ o["label"] }}</div>
+                          <div class="main-sub"><span class="muted">Max/pers :</span> {{ o["max_per_person"] }}</div>
+                        </div>
+
+                        <div class="main-qty">
+                          <span class="main-qty-label muted">Quantité</span>
+                          <input
+                            class="main-qty-input"
+                            type="number"
+                            min="1"
+                            max="{{ o['max_per_person'] }}"
+                            value="1"
+                            name="main_qty_{{ o['id'] }}"
+                            disabled
+                          />
+                        </div>
+                      </label>
+                    {% endfor %}
+                  </div>
+
+                  <div class="hint">Sélectionne 1 plat, puis ajuste la quantité.</div>
+                </div>
+              {% endif %}
+
+              {% if sides|length > 0 %}
+                <div class="menu-box">
+                  <div class="section-title">
+                    <h3>Accompagnements</h3>
+                  </div>
+
+                  <div class="list">
+                    {% for o in sides %}
+                      <div class="item offer-row">
+                        <div class="left">
+                          <div class="name">{{ o["label"] }}</div>
+                          <div class="meta"><span class="muted">Max/pers :</span> {{ o["max_per_person"] }}</div>
+                        </div>
+
+                        <input class="num"
+                               type="number"
+                               min="0"
+                               max="{{ o['max_per_person'] }}"
+                               value="0"
+                               name="offer_{{ o['id'] }}">
+                      </div>
+                    {% endfor %}
+                  </div>
+
+                  <div class="hint">Pain / charcu peuvent accompagner plusieurs plats.</div>
+                </div>
+              {% endif %}
+
+            {% endif %}
+
+            <div>
+              <label>Tu ramènes quelque chose ?</label>
+              <input name="bring" placeholder="Ex: 1 paquet de pancakes">
+            </div>
+
+            <button class="btn" type="submit">Valider la réservation</button>
+
+            <div class="footer-note">
+              Astuce : indique ce que tu ramènes pour que tout le monde s’organise 🙂
+            </div>
+          </form>
         {% endif %}
-
-        <form class="form" method="post" action="/reserve" style="margin-top:12px">
-          <div>
-            <label>Ton nom</label>
-            <input name="name" placeholder="Ex: Ben" required {% if not event["open"] %}disabled{% endif %}>
-          </div>
-
-          <div>
-            <label>Ce que tu prends (séparé par virgules)</label>
-            <input name="items" placeholder="Ex: Œufs, Pain" {% if not event["open"] %}disabled{% endif %}>
-          </div>
-
-          <div>
-            <label>Tu ramènes quelque chose ?</label>
-            <input name="bring" placeholder="Ex: 1 paquet de pancakes" {% if not event["open"] %}disabled{% endif %}>
-          </div>
-
-          <button class="btn" type="submit" {% if not event["open"] %}disabled{% endif %}>
-            Valider la réservation
-          </button>
-
-          <div class="footer-note">
-            Astuce : si tu ramènes quelque chose, indique-le pour que tout le monde le voie 🙂
-          </div>
-        </form>
       </div>
 
-      <!-- Colonne droite -->
+      <!-- COLONNE DROITE : LISTE RESERVATIONS -->
       <div class="card">
         <h2 class="card-title">Réservations</h2>
 
@@ -111,7 +201,13 @@
             <span>réservation(s)</span>
           </div>
           <div class="kpi">
-            <b>{{ "Ouvert" if event["open"] else "Fermé" }}</b>
+            <b>
+              {% if not event.get("is_planned", True) %}
+                Désactivé
+              {% else %}
+                {{ "Ouvert" if event["open"] else "Fermé" }}
+              {% endif %}
+            </b>
             <span>statut</span>
           </div>
         </div>
@@ -125,9 +221,25 @@
             {% for r in reservations %}
               <div class="item">
                 <div class="name">{{ r["name"] }}</div>
-                <div class="meta">
-                  <div><span class="muted">Prend :</span> {{ ", ".join(r["items"]) if r["items"] else "—" }}</div>
-                  <div><span class="muted">Ramène :</span> {{ r["bring"] if r["bring"] else "—" }}</div>
+
+                <div class="meta" style="margin-top:6px">
+                  {% if r["lines"] and (r["lines"]|length > 0) %}
+                    <div class="line-badges">
+                      {% for l in r["lines"] %}
+                        <span class="line-badge {% if l['type']=='MAIN' %}main{% else %}side{% endif %}">
+                          <span class="qty">{{ l["qty"] }}</span>
+                          {{ l["label"] }}
+                        </span>
+                      {% endfor %}
+                    </div>
+                  {% else %}
+                    <div class="muted">Choix : —</div>
+                  {% endif %}
+
+                  <div style="margin-top:10px">
+                    <span class="muted">Ramène :</span>
+                    {{ r["bring"] if r["bring"] else "—" }}
+                  </div>
                 </div>
               </div>
             {% endfor %}
@@ -136,29 +248,114 @@
 
         {% if request.session.get("admin") %}
           <hr class="hr">
+
           <form method="post" action="/admin/toggle">
             <button class="btn secondary" type="submit">
               {{ "Fermer les réservations" if event["open"] else "Ouvrir les réservations" }}
             </button>
           </form>
+
+          <form method="post" action="/admin/toggle-planned" style="margin-top:10px">
+            <button class="btn secondary" type="submit">
+              {{ "Désactiver le petit-déjeuner demain" if event.get("is_planned", True) else "Activer le petit-déjeuner demain" }}
+            </button>
+          </form>
+
           <div class="footer-note">Visible uniquement pour l’admin connecté.</div>
         {% endif %}
       </div>
 
     </div>
   </div>
-  <script>
-  const checkboxes = document.querySelectorAll('.menu-chip input');
-  const itemsInput = document.querySelector('input[name="items"]');
 
-  function syncItems(){
-    const values = Array.from(checkboxes)
-      .filter(c => c.checked)
-      .map(c => c.value);
-    itemsInput.value = values.join(', ');
+<script>
+  const canReserve = {{ can_reserve | tojson }};
+  if (canReserve) {
+
+    // ===== SIDE : clamp 0..max =====
+    document.querySelectorAll('input[type="number"][name^="offer_"]').forEach((inp) => {
+      const min = parseInt(inp.min || "0", 10);
+      const max = parseInt(inp.max || "0", 10);
+
+      inp.addEventListener("input", () => {
+        let v = parseInt(inp.value || "0", 10);
+        if (Number.isNaN(v)) v = 0;
+        if (v < min) v = min;
+        if (v > max) v = max;
+        inp.value = v;
+      });
+    });
+
+    // ===== MAIN : choix unique + qty liée + style selected =====
+    const radios = Array.from(document.querySelectorAll('input[type="radio"][name="main_choice"]'));
+    const qtyInputs = Array.from(document.querySelectorAll('input.main-qty-input'));
+    const cards = Array.from(document.querySelectorAll('.main-card'));
+
+    function disableAllMainQty(){
+      qtyInputs.forEach(inp => { inp.disabled = true; });
+    }
+
+    function clearSelectedCards(){
+      cards.forEach(c => c.classList.remove("selected"));
+    }
+
+    function enableSelectedQty(selectedId){
+      disableAllMainQty();
+      clearSelectedCards();
+
+      const inp = document.querySelector(`input[name="main_qty_${selectedId}"]`);
+      if (inp){
+        inp.disabled = false;
+
+        const min = parseInt(inp.min || "1", 10);
+        const max = parseInt(inp.max || "1", 10);
+        let v = parseInt(inp.value || "1", 10);
+        if (Number.isNaN(v)) v = min;
+        if (v < min) v = min;
+        if (v > max) v = max;
+        inp.value = v;
+      }
+
+      const radio = document.querySelector(`input[type="radio"][name="main_choice"][value="${selectedId}"]`);
+      if (radio){
+        const card = radio.closest(".main-card");
+        if (card) card.classList.add("selected");
+      }
+    }
+
+    radios.forEach(r => {
+      r.addEventListener("change", () => enableSelectedQty(r.value));
+    });
+
+    qtyInputs.forEach(inp => {
+      inp.addEventListener("input", () => {
+        const min = parseInt(inp.min || "1", 10);
+        const max = parseInt(inp.max || "1", 10);
+        let v = parseInt(inp.value || "1", 10);
+        if (Number.isNaN(v)) v = min;
+        if (v < min) v = min;
+        if (v > max) v = max;
+        inp.value = v;
+      });
+    });
+
+    if (radios.length > 0 && !radios.some(r => r.checked)) {
+      radios[0].checked = true;
+    }
+    const checked = radios.find(r => r.checked);
+    if (checked) enableSelectedQty(checked.value);
+
+    cards.forEach(card => {
+      card.addEventListener("click", (e) => {
+        const radio = card.querySelector('input[type="radio"][name="main_choice"]');
+        if (!radio || radio.disabled) return;
+        if (e.target && e.target.matches('input[type="number"]')) return;
+
+        radio.checked = true;
+        enableSelectedQty(radio.value);
+      });
+    });
   }
-
-  checkboxes.forEach(c => c.addEventListener('change', syncItems));
 </script>
 
 </body>

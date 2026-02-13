@@ -24,6 +24,17 @@ def init_db() -> None:
             );
             """
         )
+
+        # --- migration safe: ajout du flag "is_planned" (petit-déj prévu ?) ---
+        # 1 = prévu, 0 = pas de petit-déj
+        try:
+            conn.execute(
+                "ALTER TABLE events ADD COLUMN is_planned INTEGER NOT NULL DEFAULT 1"
+            )
+        except Exception:
+            # colonne déjà existante -> OK
+            pass
+
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS reservations (
@@ -122,16 +133,28 @@ def init_db() -> None:
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_offers_date ON offers(offer_date);")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS reservation_lines (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                reservation_id INTEGER NOT NULL,
+                offer_id INTEGER NOT NULL,
+                qty INTEGER NOT NULL,
+                FOREIGN KEY(reservation_id) REFERENCES reservations(id) ON DELETE CASCADE,
+                FOREIGN KEY(offer_id) REFERENCES offers(id) ON DELETE CASCADE
+            );
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_res_lines_res ON reservation_lines(reservation_id);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_res_lines_offer ON reservation_lines(offer_id);")
 
 
-
-
-
-
-
+# -------------------------
+# EVENTS
+# -------------------------
 
 def ensure_event_for_date(event_date: str, default_menu: List[str]) -> None:
-    """Crée l'event si absent."""
+    """Crée l'event si absent. Par défaut: ouvert + petit-déj prévu."""
     with get_conn() as conn:
         row = conn.execute(
             "SELECT id FROM events WHERE event_date = ?",
@@ -139,8 +162,12 @@ def ensure_event_for_date(event_date: str, default_menu: List[str]) -> None:
         ).fetchone()
         if row:
             return
+
         conn.execute(
-            "INSERT INTO events (event_date, menu_json, is_open) VALUES (?, ?, 1)",
+            """
+            INSERT INTO events (event_date, menu_json, is_open, is_planned)
+            VALUES (?, ?, 1, 1)
+            """,
             (event_date, json.dumps(default_menu, ensure_ascii=False)),
         )
 
@@ -148,16 +175,22 @@ def ensure_event_for_date(event_date: str, default_menu: List[str]) -> None:
 def get_event(event_date: str) -> Optional[Dict[str, Any]]:
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT id, event_date, menu_json, is_open FROM events WHERE event_date = ?",
+            """
+            SELECT id, event_date, menu_json, is_open, is_planned
+            FROM events
+            WHERE event_date = ?
+            """,
             (event_date,),
         ).fetchone()
         if not row:
             return None
+
         return {
             "id": row["id"],
             "date": row["event_date"],
             "menu": json.loads(row["menu_json"]),
             "open": bool(row["is_open"]),
+            "is_planned": bool(row["is_planned"]),
         }
 
 
@@ -168,6 +201,53 @@ def toggle_event_open(event_id: int) -> None:
             (event_id,),
         )
 
+
+def toggle_event_planned(event_id: int) -> None:
+    """ON/OFF: petit-déj prévu demain."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE events SET is_planned = CASE is_planned WHEN 1 THEN 0 ELSE 1 END WHERE id = ?",
+            (event_id,),
+        )
+
+
+def set_event_planned(event_id: int, is_planned: bool) -> None:
+    """Setter explicite (optionnel mais pratique)."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE events SET is_planned = ? WHERE id = ?",
+            (1 if is_planned else 0, event_id),
+        )
+
+
+def upsert_event_menu_preserve_open(event_date: str, menu: list[str]) -> None:
+    """Met à jour le menu de l'event sans toucher is_open ni is_planned."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT id FROM events WHERE event_date = ?",
+            (event_date,),
+        ).fetchone()
+
+        menu_json = json.dumps(menu, ensure_ascii=False)
+
+        if row:
+            conn.execute(
+                "UPDATE events SET menu_json = ? WHERE event_date = ?",
+                (menu_json, event_date),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO events (event_date, menu_json, is_open, is_planned)
+                VALUES (?, ?, 1, 1)
+                """,
+                (event_date, menu_json),
+            )
+
+
+# -------------------------
+# RESERVATIONS (legacy list)
+# -------------------------
 
 def list_reservations(event_id: int) -> List[Dict[str, Any]]:
     with get_conn() as conn:
@@ -180,6 +260,7 @@ def list_reservations(event_id: int) -> List[Dict[str, Any]]:
             """,
             (event_id,),
         ).fetchall()
+
         return [
             {
                 "id": r["id"],
@@ -201,6 +282,12 @@ def add_reservation(event_id: int, name: str, items: List[str], bring: str) -> N
             """,
             (event_id, name, json.dumps(items, ensure_ascii=False), bring),
         )
+
+
+# -------------------------
+# AGENTS
+# -------------------------
+
 def list_agents(active_only: bool = False) -> List[Dict[str, Any]]:
     with get_conn() as conn:
         if active_only:
@@ -268,6 +355,31 @@ def set_agent_whatsapp_optin(agent_id: int, whatsapp_optin: bool) -> None:
             (1 if whatsapp_optin else 0, agent_id),
         )
 
+
+def update_agent(agent_id: int, name: str, phone: str, whatsapp_optin: bool, is_active: bool) -> None:
+    clean_name = name.strip()
+    clean_phone = phone.strip()
+
+    if not clean_name:
+        raise ValueError("Agent name is required")
+    if not clean_phone:
+        raise ValueError("Agent phone is required")
+
+    with get_conn() as conn:
+        conn.execute(
+            """
+            UPDATE agents
+            SET name = ?, phone = ?, whatsapp_optin = ?, is_active = ?
+            WHERE id = ?
+            """,
+            (clean_name, clean_phone, 1 if whatsapp_optin else 0, 1 if is_active else 0, agent_id),
+        )
+
+
+# -------------------------
+# SHIFTS
+# -------------------------
+
 def list_working_agent_ids(shift_date: str) -> set[int]:
     with get_conn() as conn:
         rows = conn.execute(
@@ -278,7 +390,6 @@ def list_working_agent_ids(shift_date: str) -> set[int]:
 
 
 def set_working_agents_for_date(shift_date: str, agent_ids: List[int]) -> None:
-    # on remplace la liste complète pour la date
     with get_conn() as conn:
         conn.execute("DELETE FROM shifts WHERE shift_date = ?", (shift_date,))
         for aid in agent_ids:
@@ -286,6 +397,8 @@ def set_working_agents_for_date(shift_date: str, agent_ids: List[int]) -> None:
                 "INSERT OR IGNORE INTO shifts (shift_date, agent_id) VALUES (?, ?)",
                 (shift_date, int(aid)),
             )
+
+
 def list_working_agents_for_date(shift_date: str) -> List[Dict[str, Any]]:
     with get_conn() as conn:
         rows = conn.execute(
@@ -310,8 +423,13 @@ def list_working_agents_for_date(shift_date: str) -> List[Dict[str, Any]]:
             }
             for r in rows
         ]
+
+
+# -------------------------
+# WEEKLY MENUS
+# -------------------------
+
 def get_weekly_menu(week_start: str) -> Optional[Dict[str, Any]]:
-    import json
     with get_conn() as conn:
         row = conn.execute(
             "SELECT week_start, menu_json FROM weekly_menus WHERE week_start = ?",
@@ -326,7 +444,6 @@ def get_weekly_menu(week_start: str) -> Optional[Dict[str, Any]]:
 
 
 def upsert_weekly_menu(week_start: str, menu: Dict[str, Any]) -> None:
-    import json
     with get_conn() as conn:
         conn.execute(
             """
@@ -336,45 +453,12 @@ def upsert_weekly_menu(week_start: str, menu: Dict[str, Any]) -> None:
             """,
             (week_start, json.dumps(menu, ensure_ascii=False)),
         )
-def upsert_event_menu_preserve_open(event_date: str, menu: list[str]) -> None:
-    import json
-    with get_conn() as conn:
-        row = conn.execute(
-            "SELECT id, is_open FROM events WHERE event_date = ?",
-            (event_date,),
-        ).fetchone()
 
-        menu_json = json.dumps(menu, ensure_ascii=False)
 
-        if row:
-            # on met à jour le menu, mais on garde is_open tel quel
-            conn.execute(
-                "UPDATE events SET menu_json = ? WHERE event_date = ?",
-                (menu_json, event_date),
-            )
-        else:
-            conn.execute(
-                "INSERT INTO events (event_date, menu_json, is_open) VALUES (?, ?, 1)",
-                (event_date, menu_json),
-            )
-def update_agent(agent_id: int, name: str, phone: str, whatsapp_optin: bool, is_active: bool) -> None:
-    clean_name = name.strip()
-    clean_phone = phone.strip()
+# -------------------------
+# FOODS
+# -------------------------
 
-    if not clean_name:
-        raise ValueError("Agent name is required")
-    if not clean_phone:
-        raise ValueError("Agent phone is required")
-
-    with get_conn() as conn:
-        conn.execute(
-            """
-            UPDATE agents
-            SET name = ?, phone = ?, whatsapp_optin = ?, is_active = ?
-            WHERE id = ?
-            """,
-            (clean_name, clean_phone, 1 if whatsapp_optin else 0, 1 if is_active else 0, agent_id),
-        )
 def add_food(name: str, unit: str = "unit") -> None:
     clean_name = name.strip()
     clean_unit = (unit or "unit").strip()
@@ -416,6 +500,12 @@ def set_food_active(food_id: int, is_active: bool) -> None:
             "UPDATE foods SET is_active = ? WHERE id = ?",
             (1 if is_active else 0, food_id),
         )
+
+
+# -------------------------
+# RECIPES
+# -------------------------
+
 def add_recipe(name: str) -> None:
     clean_name = name.strip()
     if not clean_name:
@@ -455,6 +545,12 @@ def set_recipe_active(recipe_id: int, is_active: bool) -> None:
             "UPDATE recipes SET is_active = ? WHERE id = ?",
             (1 if is_active else 0, recipe_id),
         )
+
+
+# -------------------------
+# OFFERS
+# -------------------------
+
 def list_offers_for_date(offer_date: str) -> list[dict]:
     with get_conn() as conn:
         rows = conn.execute(
@@ -495,7 +591,6 @@ def list_offers_for_date(offer_date: str) -> list[dict]:
 def add_offer_main(offer_date: str, recipe_id: int, max_per_person: int) -> None:
     m = int(max(1, max_per_person))
     with get_conn() as conn:
-        # évite doublons : si déjà, on réactive + update max
         row = conn.execute(
             """
             SELECT id FROM offers
@@ -560,3 +655,92 @@ def set_offer_active(offer_id: int, is_active: bool) -> None:
             "UPDATE offers SET is_active = ? WHERE id = ?",
             (1 if is_active else 0, offer_id),
         )
+
+
+# -------------------------
+# RESERVATIONS (new lines)
+# -------------------------
+
+def create_reservation(event_id: int, name: str, bring: str) -> int:
+    clean_name = name.strip()
+    clean_bring = (bring or "").strip()
+
+    with get_conn() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO reservations (event_id, name, items_json, bring)
+            VALUES (?, ?, '[]', ?)
+            """,
+            (event_id, clean_name, clean_bring),
+        )
+        return int(cur.lastrowid)
+
+
+def set_reservation_lines(reservation_id: int, lines: list[tuple[int, int]]) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM reservation_lines WHERE reservation_id = ?", (reservation_id,))
+        conn.executemany(
+            "INSERT INTO reservation_lines (reservation_id, offer_id, qty) VALUES (?, ?, ?)",
+            [(reservation_id, offer_id, qty) for offer_id, qty in lines],
+        )
+
+
+def list_active_offers_for_date(offer_date: str) -> dict:
+    offers = list_offers_for_date(offer_date)
+    active = [o for o in offers if o["is_active"]]
+    mains = [o for o in active if o["offer_type"] == "MAIN"]
+    sides = [o for o in active if o["offer_type"] == "SIDE"]
+    return {"mains": mains, "sides": sides}
+
+
+def list_reservations_with_lines(event_id: int) -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+              r.id AS reservation_id,
+              r.name,
+              r.bring,
+              rl.qty,
+              o.offer_type,
+              COALESCE(rec.name, f.name) AS label
+            FROM reservations r
+            LEFT JOIN reservation_lines rl ON rl.reservation_id = r.id
+            LEFT JOIN offers o ON o.id = rl.offer_id
+            LEFT JOIN recipes rec ON rec.id = o.recipe_id
+            LEFT JOIN foods f ON f.id = o.food_id
+            WHERE r.event_id = ?
+            ORDER BY r.id DESC
+            """,
+            (event_id,),
+        ).fetchall()
+
+    out: list[dict] = []
+    by_id: dict[int, dict] = {}
+
+    for row in rows:
+        rid = row["reservation_id"]
+        if rid not in by_id:
+            by_id[rid] = {"name": row["name"], "bring": row["bring"] or "", "lines": []}
+            out.append(by_id[rid])
+
+        if row["label"] is not None and row["qty"] is not None:
+            by_id[rid]["lines"].append({"label": row["label"], "qty": int(row["qty"]), "type": row["offer_type"]})
+
+    return out
+
+
+def reservation_exists_for_event(event_id: int, name: str) -> bool:
+    name_norm = name.strip().lower()
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT 1
+            FROM reservations
+            WHERE event_id = ?
+              AND lower(trim(name)) = ?
+            LIMIT 1
+            """,
+            (event_id, name_norm),
+        ).fetchone()
+        return row is not None

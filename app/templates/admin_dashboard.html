@@ -3,91 +3,134 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Admin — Dashboard</title>
-  <style>
-    body{font-family:system-ui;background:#0b0f14;color:#e8eef6;margin:0}
-    .wrap{max-width:920px;margin:0 auto;padding:16px}
-    .card{background:#121a24;border:1px solid #1d2a3a;border-radius:16px;padding:16px;margin:12px 0}
-    a{color:#9cc2ff;text-decoration:none}
-    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-    @media (max-width:720px){.grid{grid-template-columns:1fr}}
-    .btn{display:inline-block;padding:12px 14px;border-radius:12px;background:#2f81f7;color:#fff;font-weight:700}
-    .muted{opacity:.75}
-    form{display:inline}
-    button{padding:10px 12px;border-radius:12px;border:none;background:#3a3f45;color:#fff;cursor:pointer}
-  </style>
+  <title>Admin — Zack & Snack</title>
+  <link rel="stylesheet" href="/static/css/app.css">
 </head>
 <body>
-<div class="wrap">
+<div class="container">
 
-  <div class="card">
-    <h2>🛠️ Admin</h2>
-    <div class="muted">Espace privé — menu semaine, agents, stats, stocks.</div>
-    <div style="margin-top:10px">
+  <!-- HEADER -->
+  <div class="header">
+    <div class="brand">
+      <div class="logo egg-logo">
+        <svg viewBox="0 0 64 64" width="28" height="28">
+          <path d="M32 6 C20 6 10 18 10 30 c0 12 10 22 22 22 s22-10 22-22 C54 18 44 6 32 6Z"
+                fill="#ffffff" opacity="0.95"/>
+          <circle cx="32" cy="32" r="8" fill="#facc15"/>
+        </svg>
+      </div>
+      <div>
+        <h1>Dashboard Admin</h1>
+        <p>Centre de contrôle Zack & Snack</p>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <a class="btn secondary" href="/">← Retour à l’accueil</a>
+
       <form method="post" action="/admin/logout">
-        <button type="submit">Se déconnecter</button>
+        <button class="btn danger" type="submit">Se déconnecter</button>
       </form>
     </div>
   </div>
-{% if flash %}
-  <div class="card" style="border-color:#2f81f7">
+
+  {% if flash %}
+  <div class="card" style="border-color:rgba(59,130,246,.4)">
     <strong>{{ flash["message"] }}</strong>
   </div>
-{% endif %}
+  {% endif %}
 
-  <div class="grid">
-    <div class="card">
-      <h3>📅 Menu de la semaine</h3>
-      <div class="muted">Créer / modifier le menu jour par jour.</div>
-      <div style="margin-top:12px">
-        <a class="btn" href="/admin/week-menu">Ouvrir</a>
-      </div>
-    </div>
-
-    <div class="card">
-      <h3>👥 Agents</h3>
-      <div class="muted">Gérer noms, numéros, opt-in WhatsApp.</div>
-      <div style="margin-top:12px">
-        <a class="btn" href="/admin/agents">Ouvrir</a>
-      </div>
-    </div>
-
-    <div class="card">
-      <h3>📊 Stats</h3>
-      <div class="muted">Réservations, participation, tendances.</div>
-      <div style="margin-top:12px">
-        <a class="btn" href="/admin/stats">Ouvrir</a>
-      </div>
-    </div>
-
-    <div class="card">
-      <h3>📦 Stocks</h3>
-      <div class="muted">Suivi basique (optionnel) : œufs, pain, etc.</div>
-      <div style="margin-top:12px">
-        <a class="btn" href="/admin/stocks">Ouvrir</a>
-      </div>
-    </div>
-  </div>
-
+  <!-- SECTION OPÉRATIONNELLE -->
   <div class="card">
-    <h3>📍 Agents de demain</h3>
-    <div class="muted">Sélection + WhatsApp.</div>
-    <div style="margin-top:12px">
-      <a class="btn" href="/admin/shifts">Ouvrir</a>
+    <h2 class="card-title">⚙️ Gestion opérationnelle</h2>
+    <div class="grid">
+
+      <div class="card">
+        <h3>🍳 Offre de demain</h3>
+        <div class="muted">Définir plats & accompagnements + max/personne.</div>
+        <div style="margin-top:12px">
+          <a class="btn" href="/admin/offers">Gérer</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>📍 Agents de demain</h3>
+        <div class="muted">Sélection + génération liens WhatsApp.</div>
+        <div style="margin-top:12px">
+          <a class="btn" href="/admin/shifts">Gérer</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>📅 Menu de la semaine</h3>
+        <div class="muted">Planification jour par jour.</div>
+        <div style="margin-top:12px">
+          <a class="btn" href="/admin/week-menu">Ouvrir</a>
+        </div>
+      </div>
+
     </div>
   </div>
-  <div class="card">
-  <h3>🔄 Sync menu de demain</h3>
-  <div class="muted">Force la mise à jour du menu de demain à partir du menu de la semaine.</div>
-  <div style="margin-top:12px">
-    <form method="post" action="/admin/sync-tomorrow">
-      <button type="submit" style="padding:12px 14px;border-radius:12px;border:none;background:#2f81f7;color:#fff;font-weight:700;cursor:pointer">
-        Synchroniser maintenant
-      </button>
-    </form>
-  </div>
-</div>
 
+  <!-- SECTION CATALOGUE -->
+  <div class="card">
+    <h2 class="card-title">📚 Catalogue</h2>
+    <div class="grid">
+
+      <div class="card">
+        <h3>🥘 Plats / Recettes</h3>
+        <div class="muted">Créer et gérer les préparations proposées.</div>
+        <div style="margin-top:12px">
+          <a class="btn secondary" href="/admin/recipes">Ouvrir</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>🥖 Aliments</h3>
+        <div class="muted">Accompagnements & unités.</div>
+        <div style="margin-top:12px">
+          <a class="btn secondary" href="/admin/foods">Ouvrir</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- SECTION ADMINISTRATION -->
+  <div class="card">
+    <h2 class="card-title">🔐 Administration</h2>
+    <div class="grid">
+
+      <div class="card">
+        <h3>👥 Agents</h3>
+        <div class="muted">Gestion complète des membres.</div>
+        <div style="margin-top:12px">
+          <a class="btn secondary" href="/admin/agents">Ouvrir</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>🔄 Synchronisation</h3>
+        <div class="muted">Force la mise à jour du menu de demain.</div>
+        <div style="margin-top:12px">
+          <form method="post" action="/admin/sync-tomorrow">
+            <button class="btn secondary" type="submit">
+              Synchroniser maintenant
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>📊 Stats (à venir)</h3>
+        <div class="muted">Participation & tendances.</div>
+        <div style="margin-top:12px">
+          <button class="btn secondary" disabled>Bientôt</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
 
 </div>
 </body>
