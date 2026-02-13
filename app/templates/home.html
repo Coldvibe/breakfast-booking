@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/static/css/app.css">
 </head>
 
-<body>
+<body data-can-reserve="{{ '1' if can_reserve else '0' }}">
   <div class="container">
 
     <!-- HEADER -->
@@ -269,7 +269,7 @@
   </div>
 
 <script>
-  const canReserve = {{ can_reserve | tojson }};
+  const canReserve = document.body.dataset.canReserve === "1";
   if (canReserve) {
 
     // ===== SIDE : clamp 0..max =====
