@@ -2,10 +2,12 @@ let deferredPrompt = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   const banner = document.getElementById("pwa-install-banner");
+  const title = banner?.querySelector(".pwa-install-banner__text strong");
+  const text = banner?.querySelector(".pwa-install-banner__text p");
   const installBtn = document.getElementById("pwa-install-btn");
   const closeBtn = document.getElementById("pwa-close-btn");
 
-  if (!banner || !installBtn || !closeBtn) {
+  if (!banner || !title || !text || !installBtn || !closeBtn) {
     return;
   }
 
@@ -17,18 +19,38 @@ document.addEventListener("DOMContentLoaded", () => {
     return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
   }
 
-  // Si l'app est déjà installée, on ne montre rien
+  function isIos() {
+    return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+  }
+
+  function isSafari() {
+    const ua = window.navigator.userAgent;
+    return /safari/i.test(ua) && !/crios|fxios|edgios|opr|opera|android/i.test(ua);
+  }
+
+  function showAndroidBanner() {
+    title.textContent = "Installer Zack & Snack";
+    text.textContent = "Ajoute l’application à ton écran d’accueil pour un accès rapide.";
+    installBtn.style.display = "";
+    banner.classList.remove("hidden");
+  }
+
+  function showIosBanner() {
+    title.textContent = "Installer Zack & Snack";
+    text.innerHTML = 'Dans Safari, touche <b>Partager</b> puis <b>Ajouter à l’écran d’accueil</b>.';
+    installBtn.style.display = "none";
+    banner.classList.remove("hidden");
+  }
+
   if (isAppInstalled()) {
     return;
   }
 
-  // Fermeture manuelle du bandeau
   closeBtn.addEventListener("click", () => {
     banner.classList.add("hidden");
     localStorage.setItem("pwaBannerDismissed", "true");
   });
 
-  // Clic sur le bouton Installer
   installBtn.addEventListener("click", async () => {
     if (!deferredPrompt) {
       return;
@@ -45,20 +67,23 @@ document.addEventListener("DOMContentLoaded", () => {
     deferredPrompt = null;
   });
 
-  // Android Chrome : événement d'installation disponible
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
     deferredPrompt = event;
 
     if (!isBannerDismissed()) {
-      banner.classList.remove("hidden");
+      showAndroidBanner();
     }
   });
 
-  // App installée
   window.addEventListener("appinstalled", () => {
     banner.classList.add("hidden");
     deferredPrompt = null;
     localStorage.removeItem("pwaBannerDismissed");
   });
+
+  // Fallback iOS Safari
+  if (isIos() && isSafari() && !isBannerDismissed()) {
+    showIosBanner();
+  }
 });
