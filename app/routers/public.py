@@ -11,9 +11,9 @@ Le but:
 """
 
 from datetime import date, timedelta
-
+from pathlib import Path
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 
 from app.db import (
     ensure_event_for_date,
@@ -30,6 +30,11 @@ from app.db import (
 
 router = APIRouter()
 
+@router.get("/service-worker.js")
+def service_worker():
+    # On sert le service worker à la racine pour qu'il couvre toute l'app
+    sw_path = Path(__file__).resolve().parent.parent / "static" / "service-worker.js"
+    return FileResponse(sw_path, media_type="application/javascript")
 
 @router.get("/", response_class=HTMLResponse)
 def home(request: Request):

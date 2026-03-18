@@ -13,6 +13,12 @@
     .muted{opacity:.75}
     .error{margin-top:10px;color:#ffb4b4}
   </style>
+    <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#0b0f14">
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Zack & Snack">
 </head>
 <body>
 <div class="wrap">
@@ -38,5 +44,21 @@
     </form>
   </div>
 </div>
+<script>
+  // ==========================
+  // PWA : service worker
+  // ==========================
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/service-worker.js")
+        .then((registration) => {
+          console.log("Service worker enregistré :", registration.scope);
+        })
+        .catch((error) => {
+          console.log("Erreur service worker :", error);
+        });
+    });
+  }  
+</script>
 </body>
 </html>
