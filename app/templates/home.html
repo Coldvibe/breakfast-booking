@@ -256,7 +256,25 @@
 
     </div>
   </div>
+<div id="pwa-install-banner" class="pwa-install-banner hidden" aria-live="polite">
+  <div class="pwa-install-banner__content">
+    <div class="pwa-install-banner__text">
+      <strong>Installer Zack & Snack</strong>
+      <p>Ajoute l’application à ton écran d’accueil pour un accès rapide.</p>
+    </div>
 
+    <div class="pwa-install-banner__actions">
+      <button id="pwa-install-btn" type="button" class="pwa-install-banner__install">
+        Installer
+      </button>
+
+      <button id="pwa-close-btn" type="button" class="pwa-install-banner__close" aria-label="Fermer">
+        ✕
+      </button>
+    </div>
+  </div>
+</div>
+<script src="{{ url_for('static', path='pwa-install.js') }}"></script>
 <script>
   // ==========================
   // Home : Logique réservation
