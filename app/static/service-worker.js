@@ -1,4 +1,4 @@
-const CACHE_NAME = "zack-snack-v1";
+const CACHE_NAME = "zack-snack-v2";
 const URLS_TO_CACHE = [
   "/",
   "/static/css/app.css",
