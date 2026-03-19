@@ -8,8 +8,8 @@
 </head>
 <body class="admin-login-page">
   <div class="admin-login-shell">
-
     <div class="admin-login-card">
+
       <div class="admin-login-brand">
         <div class="admin-login-brand__icon" aria-hidden="true">
           <svg viewBox="0 0 64 64" width="28" height="28">
@@ -50,28 +50,28 @@
         </div>
 
         <div class="form-group">
-  <label for="password">Mot de passe</label>
+          <label for="password">Mot de passe</label>
 
-  <div class="password-field">
-    <input
-      id="password"
-      name="password"
-      type="password"
-      autocomplete="current-password"
-      required
-      placeholder="Mot de passe"
-    >
+          <div class="password-field">
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+              placeholder="Mot de passe"
+            >
 
-    <button
-      type="button"
-      class="password-toggle"
-      aria-label="Afficher le mot de passe"
-      onclick="togglePasswordVisibility()"
-    >
-      👁️
-    </button>
-  </div>
-</div>
+            <button
+              type="button"
+              class="password-toggle"
+              aria-label="Afficher le mot de passe"
+              onclick="togglePasswordVisibility()"
+            >
+              👁️
+            </button>
+          </div>
+        </div>
 
         <button class="btn admin-login-submit" type="submit">
           Se connecter
@@ -82,23 +82,23 @@
         <a href="/">← Retour à l’accueil</a>
       </div>
     </div>
-
   </div>
+
   <script>
-  function togglePasswordVisibility() {
-    const input = document.getElementById("password");
-    const btn = document.querySelector(".password-toggle");
+    function togglePasswordVisibility() {
+      const input = document.getElementById("password");
+      const btn = document.querySelector(".password-toggle");
 
-    if (!input) return;
+      if (!input || !btn) return;
 
-    if (input.type === "password") {
-      input.type = "text";
-      btn.textContent = "🙈";
-    } else {
-      input.type = "password";
-      btn.textContent = "👁️";
+      if (input.type === "password") {
+        input.type = "text";
+        btn.textContent = "🙈";
+      } else {
+        input.type = "password";
+        btn.textContent = "👁️";
+      }
     }
-  }
-</script>
+  </script>
 </body>
 </html>
