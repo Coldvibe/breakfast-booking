@@ -1,0 +1,36 @@
+<section class="card ops-header">
+  <div class="ops-header__main">
+    <div>
+      <h1>📅 Demain</h1>
+      <p>Organisation du petit-déjeuner du <strong>{{ event["date"] }}</strong></p>
+    </div>
+
+    <div class="ops-status {% if event.get('is_planned', True) and (mains|length > 0 or sides|length > 0) and working_ids|length > 0 %}ops-status--ok{% else %}ops-status--warn{% endif %}">
+      {% if not event.get("is_planned", True) %}
+        ⛔ Petit-déjeuner désactivé
+      {% elif (mains|length == 0 and sides|length == 0) %}
+        ⚠️ Offre à configurer
+      {% elif working_ids|length == 0 %}
+        ⚠️ Agents à définir
+      {% else %}
+        ✅ Configuration en place pour demain
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="ops-header__actions">
+    <form method="post" action="/admin/tomorrow/toggle-open">
+      <button class="btn" type="submit">
+        {% if event["open"] %}Fermer les réservations{% else %}Ouvrir les réservations{% endif %}
+      </button>
+    </form>
+
+    <form method="post" action="/admin/tomorrow/toggle-planned">
+      <button class="btn secondary" type="submit">
+        {% if event.get("is_planned", True) %}Désactiver petit-déjeuner{% else %}Activer petit-déjeuner{% endif %}
+      </button>
+    </form>
+
+    <a class="btn ghost" href="/admin">Retour dashboard</a>
+  </div>
+</section>

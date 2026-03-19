@@ -854,3 +854,10 @@ def update_event_flags(event_date: str, open_value: int = None, is_planned_value
 
     with get_conn() as conn:
         conn.execute(query, values)
+        
+def delete_offer(offer_id: int) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "DELETE FROM offers WHERE id = ?",
+            (offer_id,),
+        )

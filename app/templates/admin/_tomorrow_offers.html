@@ -43,11 +43,57 @@
             <div class="offer-item">
               <div>
                 <strong>{{ main["label"] }}</strong>
-                <div class="muted">Max/pers : {{ main["max_per_person"] }}</div>
+                <form
+                    hx-post="/admin/tomorrow/update-offer-max"
+                    hx-trigger="change delay:300ms"
+                    hx-target="#tomorrow-offers-block"
+                    hx-swap="outerHTML"
+                    class="inline-edit-form"
+                >
+                    <input type="hidden" name="offer_id" value="{{ main['id'] }}">
+                    <input type="hidden" name="date" value="{{ event['date'] }}">
+
+                    <label class="inline-max-label">
+                        <span class="muted">Max/pers :</span>
+                        <input
+                        type="number"
+                        name="max_per_person"
+                        value="{{ main['max_per_person'] }}"
+                        min="1"
+                        class="input-small"
+                        >
+                    </label>
+                </form>
               </div>
 
               <div class="offer-item__actions">
-                <a class="btn secondary small" href="/admin/offers">Gérer</a>
+                <form
+                    hx-post="/admin/tomorrow/toggle-offer"
+                    hx-target="#tomorrow-offers-block"
+                    hx-swap="outerHTML"
+                >
+                    <input type="hidden" name="offer_id" value="{{ main['id'] }}">
+                    <input type="hidden" name="date" value="{{ event['date'] }}">
+
+                    <button class="btn small" type="submit">
+                        {% if main["is_active"] %}
+                        Désactiver
+                        {% else %}
+                        Activer
+                        {% endif %}
+                    </button>
+                </form>
+                <form
+                    hx-post="/admin/tomorrow/delete-offer"
+                    hx-target="#tomorrow-offers-block"
+                    hx-swap="outerHTML"
+                    onsubmit="return confirm('Supprimer cette offre de demain ?');"
+                >
+                    <input type="hidden" name="offer_id" value="{{ main['id'] }}">
+                    <input type="hidden" name="date" value="{{ event['date'] }}">
+
+                    <button class="btn danger small" type="submit">Supprimer</button>
+                </form>
               </div>
             </div>
           {% endfor %}
@@ -89,11 +135,57 @@
             <div class="offer-item">
               <div>
                 <strong>{{ side["label"] }}</strong>
-                <div class="muted">Max/pers : {{ side["max_per_person"] }}</div>
+                <form
+                    hx-post="/admin/tomorrow/update-offer-max"
+                    hx-trigger="change delay:300ms"
+                    hx-target="#tomorrow-offers-block"
+                    hx-swap="outerHTML"
+                    class="inline-edit-form"
+                >
+                    <input type="hidden" name="offer_id" value="{{ side['id'] }}">
+                    <input type="hidden" name="date" value="{{ event['date'] }}">
+
+                    <label class="inline-max-label">
+                        <span class="muted">Max/pers :</span>
+                        <input
+                        type="number"
+                        name="max_per_person"
+                        value="{{ side['max_per_person'] }}"
+                        min="1"
+                        class="input-small"
+                        >
+                    </label>
+                </form>
               </div>
 
               <div class="offer-item__actions">
-                <a class="btn secondary small" href="/admin/offers">Gérer</a>
+                <form
+                    hx-post="/admin/tomorrow/toggle-offer"
+                    hx-target="#tomorrow-offers-block"
+                    hx-swap="outerHTML"
+                >
+                    <input type="hidden" name="offer_id" value="{{ side['id'] }}">
+                    <input type="hidden" name="date" value="{{ event['date'] }}">
+
+                    <button class="btn small" type="submit">
+                        {% if side["is_active"] %}
+                        Désactiver
+                        {% else %}
+                        Activer
+                        {% endif %}
+                    </button>
+                </form>
+                <form
+                    hx-post="/admin/tomorrow/delete-offer"
+                    hx-target="#tomorrow-offers-block"
+                    hx-swap="outerHTML"
+                    onsubmit="return confirm('Supprimer cette offre de demain ?');"
+                >
+                    <input type="hidden" name="offer_id" value="{{ side['id'] }}">
+                    <input type="hidden" name="date" value="{{ event['date'] }}">
+
+                    <button class="btn danger small" type="submit">Supprimer</button>
+                </form>
               </div>
             </div>
           {% endfor %}

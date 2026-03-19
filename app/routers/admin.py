@@ -48,6 +48,7 @@ from app.db import (
     add_offer_side,
     update_offer_max,
     set_offer_active,
+    delete_offer,
     
 )
 
@@ -788,3 +789,120 @@ def admin_recipes_edit_post(
     update_recipe(recipe_id, name=name, is_active=is_active)
     _flash(request, "✅ Recette mise à jour.")
     return RedirectResponse("/admin/recipes", status_code=303)
+@router.post("/admin/tomorrow/update-offer-max")
+async def update_offer_max_route(request: Request):
+    guard = require_admin(request)
+    if guard:
+        return guard
+
+    form = await request.form()
+
+    offer_id = form.get("offer_id")
+    event_date = form.get("date")
+    max_raw = form.get("max_per_person")
+
+    try:
+        offer_id = int(offer_id)
+        max_val = max(1, int(max_raw))
+        update_offer_max(offer_id, max_val)
+    except:
+        pass
+
+    return await _render_offers_partial(request, event_date)
+@router.post("/admin/tomorrow/toggle-offer")
+async def toggle_offer_route(request: Request):
+    guard = require_admin(request)
+    if guard:
+        return guard
+
+    form = await request.form()
+
+    offer_id = form.get("offer_id")
+    event_date = form.get("date")
+
+    try:
+        offer_id = int(offer_id)
+
+        # récup état actuel
+        offers = list_offers_for_date(event_date)
+        offer = next((o for o in offers if o["id"] == offer_id), None)
+
+        if offer:
+            set_offer_active(offer_id, not offer["is_active"])
+    except:
+        pass
+
+    return await _render_offers_partial(request, event_date)
+async def _render_offers_partial(request: Request, event_date: str):
+    event = get_event(event_date)
+    offers = list_offers_for_date(event_date)
+
+    mains = [o for o in offers if o["offer_type"] == "MAIN"]
+    sides = [o for o in offers if o["offer_type"] == "SIDE"]
+
+    recipes = list_recipes(active_only=True)
+    foods = list_foods(active_only=True)
+
+    return _templates(request).TemplateResponse(
+        "admin/_tomorrow_offers.html",
+        {
+            "request": request,
+            "event": event,
+            "mains": mains,
+            "sides": sides,
+            "recipes": recipes,
+            "foods": foods,
+            "save_success": True,
+        },
+    )
+
+@router.post("/admin/tomorrow/delete-offer")
+async def delete_offer_route(request: Request):
+    guard = require_admin(request)
+    if guard:
+        return guard
+
+    form = await request.form()
+
+    offer_id_raw = form.get("offer_id")
+    event_date = form.get("date")
+
+    try:
+        offer_id = int(offer_id_raw)
+        delete_offer(offer_id)
+    except Exception:
+        pass
+
+    return await _render_offers_partial(request, event_date)
+
+@router.get("/admin/tomorrow/top")
+def admin_tomorrow_top(request: Request):
+    guard = require_admin(request)
+    if guard:
+        return guard
+
+    event_date = _tomorrow_str()
+    ensure_event_for_date(event_date, _menu_for_tomorrow(request))
+
+    event = get_event(event_date)
+    snapshot = get_tomorrow_admin_snapshot(event_date)
+
+    offers = list_offers_for_date(event_date)
+    mains = [o for o in offers if o["offer_type"] == "MAIN"]
+    sides = [o for o in offers if o["offer_type"] == "SIDE"]
+
+    agents = list_agents(active_only=True)
+    working_ids = list_working_agent_ids(event_date)
+
+    return _templates(request).TemplateResponse(
+        "admin/_tomorrow_top.html",
+        {
+            "request": request,
+            "event": event,
+            "snapshot": snapshot,
+            "mains": mains,
+            "sides": sides,
+            "agents": agents,
+            "working_ids": working_ids,
+        },
+    )

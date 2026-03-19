@@ -1,0 +1,26 @@
+<section class="ops-health">
+  <div class="mini-card">
+    <span class="mini-card__label">Petit-déjeuner</span>
+    <strong>{{ "Prévu" if event.get("is_planned", True) else "Désactivé" }}</strong>
+  </div>
+
+  <div class="mini-card">
+    <span class="mini-card__label">Réservations</span>
+    <strong>{{ "Ouvertes" if event["open"] else "Fermées" }}</strong>
+  </div>
+
+  <div class="mini-card">
+    <span class="mini-card__label">Agents</span>
+    <strong>{{ working_ids|length }} sélectionné(s)</strong>
+  </div>
+
+  <div class="mini-card">
+    <span class="mini-card__label">Offre</span>
+    <strong>{{ mains|length }} plat(s) / {{ sides|length }} accompagnement(s)</strong>
+  </div>
+
+  <div class="mini-card">
+    <span class="mini-card__label">Réservations</span>
+    <strong>{{ snapshot["kpis"]["reservations_count"] }} reçue(s)</strong>
+  </div>
+</section>

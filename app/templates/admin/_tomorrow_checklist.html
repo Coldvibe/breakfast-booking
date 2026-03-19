@@ -1,0 +1,30 @@
+<section class="card">
+  <h2 class="section-title">✅ Checklist</h2>
+
+  <div class="checklist">
+    <div class="checklist-item {% if working_ids|length > 0 %}done{% endif %}">
+      {% if working_ids|length > 0 %}✅{% else %}⬜{% endif %}
+      Agents définis
+    </div>
+
+    <div class="checklist-item {% if mains|length > 0 or sides|length > 0 %}done{% endif %}">
+      {% if mains|length > 0 or sides|length > 0 %}✅{% else %}⬜{% endif %}
+      Offre configurée
+    </div>
+
+    <div class="checklist-item {% if event['open'] %}doing{% endif %}">
+      {% if event['open'] %}🟡{% else %}⬜{% endif %}
+      Réservations ouvertes
+    </div>
+
+    <div class="checklist-item {% if snapshot['kpis']['reservations_count'] > 0 %}done{% endif %}">
+      {% if snapshot['kpis']['reservations_count'] > 0 %}✅{% else %}⬜{% endif %}
+      Réservations reçues
+    </div>
+
+    <div class="checklist-item {% if snapshot['kpis']['reservations_count'] > 0 and event.get('is_planned', True) %}doing{% endif %}">
+      {% if snapshot['kpis']['reservations_count'] > 0 and event.get('is_planned', True) %}🟡{% else %}⬜{% endif %}
+      Préparation finale
+    </div>
+  </div>
+</section>

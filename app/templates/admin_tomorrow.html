@@ -9,103 +9,7 @@
 <body>
   <div class="container admin-tomorrow-page">
 
-    <!-- HEADER PILOTAGE -->
-    <section class="card ops-header">
-      <div class="ops-header__main">
-        <div>
-          <h1>📅 Demain</h1>
-          <p>Organisation du petit-déjeuner du <strong>{{ event["date"] }}</strong></p>
-        </div>
-
-        <div class="ops-status {% if event.get('is_planned', True) and (mains|length > 0 or sides|length > 0) and agents|length > 0 %}ops-status--ok{% else %}ops-status--warn{% endif %}">
-          {% if not event.get("is_planned", True) %}
-            ⛔ Petit-déjeuner désactivé
-          {% elif (mains|length == 0 and sides|length == 0) %}
-            ⚠️ Offre à configurer
-          {% elif working_ids|length == 0 %}
-            ⚠️ Agents à définir
-          {% else %}
-            ✅ Configuration en place pour demain
-          {% endif %}
-        </div>
-      </div>
-
-      <div class="ops-header__actions">
-        <form method="post" action="/admin/tomorrow/toggle-open">
-          <button class="btn" type="submit">
-            {% if event["open"] %}Fermer les réservations{% else %}Ouvrir les réservations{% endif %}
-          </button>
-        </form>
-
-        <form method="post" action="/admin/tomorrow/toggle-planned">
-          <button class="btn secondary" type="submit">
-            {% if event.get("is_planned", True) %}Désactiver petit-déjeuner{% else %}Activer petit-déjeuner{% endif %}
-          </button>
-        </form>
-
-        <a class="btn ghost" href="/admin">Retour dashboard</a>
-      </div>
-    </section>
-
-    <!-- SANTE DU SERVICE -->
-    <section class="ops-health">
-      <div class="mini-card">
-        <span class="mini-card__label">Petit-déjeuner</span>
-        <strong>{{ "Prévu" if event.get("is_planned", True) else "Désactivé" }}</strong>
-      </div>
-
-      <div class="mini-card">
-        <span class="mini-card__label">Réservations</span>
-        <strong>{{ "Ouvertes" if event["open"] else "Fermées" }}</strong>
-      </div>
-
-      <div class="mini-card">
-        <span class="mini-card__label">Agents</span>
-        <strong>{{ working_ids|length }} sélectionné(s)</strong>
-      </div>
-
-      <div class="mini-card">
-        <span class="mini-card__label">Offre</span>
-        <strong>{{ mains|length }} plat(s) / {{ sides|length }} accompagnement(s)</strong>
-      </div>
-
-      <div class="mini-card">
-        <span class="mini-card__label">Réservations</span>
-        <strong>{{ snapshot["kpis"]["reservations_count"] }} reçue(s)</strong>
-      </div>
-    </section>
-
-    <!-- CHECKLIST -->
-    <section class="card">
-      <h2 class="section-title">✅ Checklist</h2>
-
-      <div class="checklist">
-        <div class="checklist-item {% if working_ids|length > 0 %}done{% endif %}">
-          {% if working_ids|length > 0 %}✅{% else %}⬜{% endif %}
-          Agents définis
-        </div>
-
-        <div class="checklist-item {% if mains|length > 0 or sides|length > 0 %}done{% endif %}">
-          {% if mains|length > 0 or sides|length > 0 %}✅{% else %}⬜{% endif %}
-          Offre configurée
-        </div>
-
-        <div class="checklist-item {% if event['open'] %}doing{% endif %}">
-          {% if event['open'] %}🟡{% else %}⬜{% endif %}
-          Réservations ouvertes
-        </div>
-
-        <div class="checklist-item {% if snapshot['kpis']['reservations_count'] > 0 %}done{% endif %}">
-          {% if snapshot['kpis']['reservations_count'] > 0 %}✅{% else %}⬜{% endif %}
-          Réservations reçues
-        </div>
-
-        <div class="checklist-item {% if snapshot['kpis']['reservations_count'] > 0 and event.get('is_planned', True) %}doing{% endif %}">
-          {% if snapshot['kpis']['reservations_count'] > 0 and event.get('is_planned', True) %}🟡{% else %}⬜{% endif %}
-          Préparation finale
-        </div>
-      </div>
-    </section>
+  {% include "admin/_tomorrow_top.html" %}
 
     <!-- CONFIGURATION RAPIDE -->
     <div class="two-col-layout">
@@ -217,6 +121,30 @@
 
   document.addEventListener("DOMContentLoaded", setupAutoHideSuccessMessages);
   document.body.addEventListener("htmx:afterSwap", setupAutoHideSuccessMessages);
+</script>
+<script>
+  function refreshTomorrowTopBlock() {
+    const topBlock = document.getElementById("tomorrow-top-block");
+    if (!topBlock) return;
+
+    fetch("/admin/tomorrow/top")
+      .then((response) => response.text())
+      .then((html) => {
+        topBlock.outerHTML = html;
+      })
+      .catch((error) => {
+        console.error("Erreur refresh top block:", error);
+      });
+  }
+
+  document.body.addEventListener("htmx:afterSwap", (event) => {
+    const target = event.detail.target;
+    if (!target) return;
+
+    if (target.id === "tomorrow-agents-block" || target.id === "tomorrow-offers-block") {
+      refreshTomorrowTopBlock();
+    }
+  });
 </script>
 </body>
 </html>

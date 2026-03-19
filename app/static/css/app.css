@@ -1325,3 +1325,41 @@ input:focus, textarea:focus{border-color:rgba(47,129,247,.9); box-shadow:0 0 0 4
   opacity: 0;
   transform: translateY(-4px);
 }
+.input-small {
+  width: 60px;
+  padding: 4px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+.inline-edit-form {
+  display: inline-block;
+}
+
+.btn.danger {
+  background: rgba(239, 68, 68, 0.16);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.btn.danger:hover {
+  background: rgba(239, 68, 68, 0.22);
+}
+.inline-max-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.input-small {
+  width: 70px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+}
+
+.inline-edit-form {
+  display: inline-block;
+}
