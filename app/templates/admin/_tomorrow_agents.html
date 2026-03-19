@@ -1,0 +1,25 @@
+<div id="tomorrow-agents-block">
+  <h3>👥 Agents de demain</h3>
+
+  <form
+    hx-post="/admin/tomorrow/update-agents"
+    hx-target="#tomorrow-agents-block"
+    hx-swap="outerHTML"
+  >
+    <input type="hidden" name="date" value="{{ event.date }}" />
+
+    {% for agent in agents %}
+      <label style="display:block; margin-bottom:6px;">
+        <input
+          type="checkbox"
+          name="agent_ids"
+          value="{{ agent.id }}"
+          {% if agent.id in working_agent_ids %}checked{% endif %}
+        />
+        {{ agent.name }}
+      </label>
+    {% endfor %}
+
+    <button type="submit">💾 Enregistrer</button>
+  </form>
+</div>

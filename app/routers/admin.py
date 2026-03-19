@@ -19,12 +19,14 @@ from app.db import (
     toggle_event_open,
     toggle_event_planned,
     get_tomorrow_admin_snapshot,
+    update_event_flags,
     # agents
     list_agents,
     add_agent,
     update_agent,
     set_agent_active,
     set_agent_whatsapp_optin,
+    set_working_agents_for_date,
     # shifts
     list_working_agent_ids,
     set_working_agents_for_date,
@@ -564,6 +566,8 @@ def admin_offers_toggle(
 
     set_offer_active(offer_id, bool(is_active))
     return RedirectResponse("/admin/offers", status_code=303)
+
+
 @router.get("/admin/tomorrow", response_class=HTMLResponse)
 def admin_tomorrow(request: Request):
     # Protection admin
@@ -573,24 +577,143 @@ def admin_tomorrow(request: Request):
 
     event_date = _tomorrow_str()
 
-    # On garantit l'event de demain
+    # On garantit l’event de demain
     ensure_event_for_date(event_date, _menu_for_tomorrow(request))
     event = get_event(event_date)
 
-    offers = list_offers_for_date(event_date)
+    # Snapshot global "demain" déjà utilisé sur le dashboard
+    snapshot = get_tomorrow_admin_snapshot(event_date)
 
+    # Offres configurées
+    offers = list_offers_for_date(event_date)
     mains = [o for o in offers if o["offer_type"] == "MAIN"]
     sides = [o for o in offers if o["offer_type"] == "SIDE"]
+
+    # Catalogue utile pour composer l’offre directement depuis la page
+    recipes = list_recipes(active_only=True)
+    foods = list_foods(active_only=True)
+
+    # Agents disponibles + sélectionnés demain
+    agents = list_agents(active_only=True)
+    working_ids = list_working_agent_ids(event_date)
+
+    # On enrichit les agents avec un booléen simple pour le template
+    for agent in agents:
+        agent["selected_tomorrow"] = agent["id"] in working_ids
 
     return _templates(request).TemplateResponse(
         "admin_tomorrow.html",
         {
             "request": request,
             "event": event,
+            "snapshot": snapshot,
             "mains": mains,
             "sides": sides,
+            "recipes": recipes,
+            "foods": foods,
+            "agents": agents,
+            "working_ids": working_ids,
         },
     )
+
+
+@router.post("/admin/tomorrow/toggle-open")
+def admin_tomorrow_toggle_open(request: Request):
+    guard = require_admin(request)
+    if guard:
+        return guard
+
+    event_date = _tomorrow_str()
+    ensure_event_for_date(event_date, _menu_for_tomorrow(request))
+
+    event = get_event(event_date)
+    new_open = 0 if event["open"] else 1
+    update_event_flags(event_date, open_value=new_open)
+
+    return RedirectResponse(url="/admin/tomorrow", status_code=303)
+
+
+@router.post("/admin/tomorrow/toggle-planned")
+def admin_tomorrow_toggle_planned(request: Request):
+    guard = require_admin(request)
+    if guard:
+        return guard
+
+    event_date = _tomorrow_str()
+    ensure_event_for_date(event_date, _menu_for_tomorrow(request))
+
+    event = get_event(event_date)
+    current_planned = 1 if event.get("is_planned", True) else 0
+    new_planned = 0 if current_planned else 1
+    update_event_flags(event_date, is_planned_value=new_planned)
+
+    return RedirectResponse(url="/admin/tomorrow", status_code=303)
+
+
+@router.post("/admin/tomorrow/update-agents")
+async def admin_tomorrow_update_agents(request: Request):
+    guard = require_admin(request)
+    if guard:
+        return guard
+
+    form = await request.form()
+    shift_date = form.get("shift_date")
+    working_agent_ids_raw = form.getlist("working_agent_ids")
+
+    working_agent_ids = []
+    for value in working_agent_ids_raw:
+        try:
+            working_agent_ids.append(int(value))
+        except (TypeError, ValueError):
+            pass
+
+    if shift_date:
+        set_working_agents_for_date(shift_date, working_agent_ids)
+
+    return RedirectResponse(url="/admin/tomorrow", status_code=303)
+
+
+@router.post("/admin/tomorrow/add-offer")
+async def admin_tomorrow_add_offer(request: Request):
+    guard = require_admin(request)
+    if guard:
+        return guard
+
+    form = await request.form()
+
+    event_date = form.get("date")
+    offer_type = form.get("offer_type")
+    max_per_person_raw = form.get("max_per_person")
+
+    try:
+        max_per_person = int(max_per_person_raw or 1)
+    except (TypeError, ValueError):
+        max_per_person = 1
+
+    if max_per_person < 1:
+        max_per_person = 1
+
+    if event_date and offer_type == "MAIN":
+        recipe_id_raw = form.get("recipe_id")
+        try:
+            recipe_id = int(recipe_id_raw)
+            add_offer_main(event_date, recipe_id, max_per_person)
+        except (TypeError, ValueError):
+            pass
+
+    elif event_date and offer_type == "SIDE":
+        food_id_raw = form.get("food_id")
+        try:
+            food_id = int(food_id_raw)
+            add_offer_side(event_date, food_id, max_per_person)
+        except (TypeError, ValueError):
+            pass
+
+    return RedirectResponse(url="/admin/tomorrow", status_code=303)
+
+
+
+
 @router.get("/admin/recipes/edit/{recipe_id}", response_class=HTMLResponse)
 def admin_recipes_edit(request: Request, recipe_id: int):
     guard = require_admin(request)

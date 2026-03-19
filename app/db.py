@@ -829,3 +829,28 @@ def update_recipe(recipe_id: int, name: str, is_active: bool) -> None:
             """,
             (clean_name, 1 if is_active else 0, recipe_id),
         )
+def update_event_flags(event_date: str, open_value: int = None, is_planned_value: int = None) -> None:
+    fields = []
+    values = []
+
+    if open_value is not None:
+        fields.append("is_open = ?")
+        values.append(int(open_value))
+
+    if is_planned_value is not None:
+        fields.append("is_planned = ?")
+        values.append(int(is_planned_value))
+
+    if not fields:
+        return
+
+    values.append(event_date)
+
+    query = f"""
+        UPDATE events
+        SET {", ".join(fields)}
+        WHERE event_date = ?
+    """
+
+    with get_conn() as conn:
+        conn.execute(query, values)

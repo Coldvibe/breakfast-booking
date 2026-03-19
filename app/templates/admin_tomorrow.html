@@ -3,171 +3,318 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Admin — Demain</title>
+  <title>Zack & Snack – Admin Demain</title>
   <link rel="stylesheet" href="/static/css/app.css">
-  <link rel="manifest" href="/static/manifest.json">
-  <meta name="theme-color" content="#0b0f14">
-  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Zack & Snack">
 </head>
 <body>
-<div class="container">
+  <div class="container admin-tomorrow-page">
 
-  <!-- Header + navigation rapide -->
-  <div class="header">
-    <div class="brand">
-      <div class="logo egg-logo">
-        <svg viewBox="0 0 64 64" width="28" height="28" aria-hidden="true">
-          <path d="M32 6 C20 6 10 18 10 30 c0 12 10 22 22 22 s22-10 22-22 C54 18 44 6 32 6Z"
-                fill="#ffffff" opacity="0.95"/>
-          <circle cx="32" cy="32" r="8" fill="#facc15"></circle>
-        </svg>
+    <!-- HEADER PILOTAGE -->
+    <section class="card ops-header">
+      <div class="ops-header__main">
+        <div>
+          <h1>📅 Demain</h1>
+          <p>Organisation du petit-déjeuner du <strong>{{ event["date"] }}</strong></p>
+        </div>
+
+        <div class="ops-status {% if event.get('is_planned', True) and (mains|length > 0 or sides|length > 0) and agents|length > 0 %}ops-status--ok{% else %}ops-status--warn{% endif %}">
+          {% if not event.get("is_planned", True) %}
+            ⛔ Petit-déjeuner désactivé
+          {% elif (mains|length == 0 and sides|length == 0) %}
+            ⚠️ Offre à configurer
+          {% elif working_ids|length == 0 %}
+            ⚠️ Agents à définir
+          {% else %}
+            ✅ Configuration en place pour demain
+          {% endif %}
+        </div>
       </div>
-      <div>
-        <h1>Demain</h1>
-        <p>Configuration & suivi du petit-déjeuner</p>
+
+      <div class="ops-header__actions">
+        <form method="post" action="/admin/tomorrow/toggle-open">
+          <button class="btn" type="submit">
+            {% if event["open"] %}Fermer les réservations{% else %}Ouvrir les réservations{% endif %}
+          </button>
+        </form>
+
+        <form method="post" action="/admin/tomorrow/toggle-planned">
+          <button class="btn secondary" type="submit">
+            {% if event.get("is_planned", True) %}Désactiver petit-déjeuner{% else %}Activer petit-déjeuner{% endif %}
+          </button>
+        </form>
+
+        <a class="btn ghost" href="/admin">Retour dashboard</a>
       </div>
-    </div>
+    </section>
 
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <a class="btn secondary" href="/admin">← Dashboard</a>
-      <a class="btn secondary" href="/">Accueil</a>
-
-      <form method="post" action="/admin/logout">
-        <button class="btn danger" type="submit">Se déconnecter</button>
-      </form>
-    </div>
-  </div>
-
-  <!-- Infos globales "demain" -->
-  <div class="card">
-    <h2 class="card-title">📅 Petit-déjeuner du <b>{{ event["date"] }}</b></h2>
-
-    <div class="kpis">
-      <div class="kpi">
-        <b>{{ "Prévu" if event["is_planned"] else "Non prévu" }}</b>
-        <span>planning</span>
+    <!-- SANTE DU SERVICE -->
+    <section class="ops-health">
+      <div class="mini-card">
+        <span class="mini-card__label">Petit-déjeuner</span>
+        <strong>{{ "Prévu" if event.get("is_planned", True) else "Désactivé" }}</strong>
       </div>
-      <div class="kpi">
-        <b>{{ "Ouvert" if event["open"] else "Fermé" }}</b>
-        <span>réservations</span>
+
+      <div class="mini-card">
+        <span class="mini-card__label">Réservations</span>
+        <strong>{{ "Ouvertes" if event["open"] else "Fermées" }}</strong>
       </div>
-    </div>
 
-    <hr class="hr">
+      <div class="mini-card">
+        <span class="mini-card__label">Agents</span>
+        <strong>{{ working_ids|length }} sélectionné(s)</strong>
+      </div>
 
-    <!-- Actions rapides : planned + open/close -->
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <form method="post" action="/admin/toggle-planned">
-        <button class="btn secondary" type="submit">
-          {{ "Désactiver le petit-déjeuner" if event["is_planned"] else "Activer le petit-déjeuner" }}
-        </button>
-      </form>
+      <div class="mini-card">
+        <span class="mini-card__label">Offre</span>
+        <strong>{{ mains|length }} plat(s) / {{ sides|length }} accompagnement(s)</strong>
+      </div>
 
-      <form method="post" action="/admin/toggle">
-        <button class="btn secondary" type="submit">
-          {{ "Fermer les réservations" if event["open"] else "Ouvrir les réservations" }}
-        </button>
-      </form>
+      <div class="mini-card">
+        <span class="mini-card__label">Réservations</span>
+        <strong>{{ snapshot["kpis"]["reservations_count"] }} reçue(s)</strong>
+      </div>
+    </section>
 
-      <a class="btn" href="/admin/offers">Gérer les offres</a>
-      <a class="btn" href="/admin/shifts">Gérer les agents de demain</a>
-    </div>
-  </div>
+    <!-- CHECKLIST -->
+    <section class="card">
+      <h2 class="section-title">✅ Checklist</h2>
 
-  <!-- Menu "texte" (pour rappel rapide) -->
-  <div class="card">
-    <h2 class="card-title">📝 Menu (rappel)</h2>
-    <div class="muted">Affichage simple, basé sur l’event de demain.</div>
+      <div class="checklist">
+        <div class="checklist-item {% if working_ids|length > 0 %}done{% endif %}">
+          {% if working_ids|length > 0 %}✅{% else %}⬜{% endif %}
+          Agents définis
+        </div>
 
-    <hr class="hr">
+        <div class="checklist-item {% if mains|length > 0 or sides|length > 0 %}done{% endif %}">
+          {% if mains|length > 0 or sides|length > 0 %}✅{% else %}⬜{% endif %}
+          Offre configurée
+        </div>
 
-    {% if event["menu"] and (event["menu"]|length > 0) %}
-      <div class="list">
-        {% for item in event["menu"] %}
-          <div class="item">
-            <div class="name">{{ item }}</div>
+        <div class="checklist-item {% if event['open'] %}doing{% endif %}">
+          {% if event['open'] %}🟡{% else %}⬜{% endif %}
+          Réservations ouvertes
+        </div>
+
+        <div class="checklist-item {% if snapshot['kpis']['reservations_count'] > 0 %}done{% endif %}">
+          {% if snapshot['kpis']['reservations_count'] > 0 %}✅{% else %}⬜{% endif %}
+          Réservations reçues
+        </div>
+
+        <div class="checklist-item {% if snapshot['kpis']['reservations_count'] > 0 and event.get('is_planned', True) %}doing{% endif %}">
+          {% if snapshot['kpis']['reservations_count'] > 0 and event.get('is_planned', True) %}🟡{% else %}⬜{% endif %}
+          Préparation finale
+        </div>
+      </div>
+    </section>
+
+    <!-- CONFIGURATION RAPIDE -->
+    <div class="two-col-layout">
+
+      <!-- AGENTS DE DEMAIN -->
+      <section class="card">
+        <div class="block-head">
+          <h2>👥 Agents de demain</h2>
+          <p>Sélectionne les collègues concernés pour demain.</p>
+        </div>
+
+        <form method="post" action="/admin/tomorrow/update-agents">
+          <div class="agent-list">
+            {% for agent in agents %}
+              <label class="agent-row">
+                <div>
+                  <div class="agent-name">{{ agent["name"] }}</div>
+                  <div class="agent-meta">{{ agent["phone"] or "Pas de téléphone" }}</div>
+                </div>
+                <input type="hidden" name="shift_date" value="{{ event['date'] }}">
+                <div class="agent-actions">
+                  <input
+                    type="checkbox"
+                    name="working_agent_ids"
+                    value="{{ agent['id'] }}"
+                    {% if agent["selected_tomorrow"] %}checked{% endif %}
+                  >
+                  <span>Travaille</span>
+                </div>
+              </label>
+            {% endfor %}
           </div>
-        {% endfor %}
+
+          <div class="inline-actions">
+            <button class="btn" type="submit">Enregistrer</button>
+            <a class="btn secondary" href="/admin/agents-tomorrow">Vue complète</a>
+          </div>
+        </form>
+      </section>
+
+      <!-- OFFRE DE DEMAIN -->
+      <section class="card">
+        <div class="block-head">
+          <h2>🍳 Offre de demain</h2>
+          <p>Compose l’offre directement depuis cette page.</p>
+        </div>
+
+        <div class="offer-columns">
+          <div class="offer-column">
+            <h3>Plats principaux</h3>
+
+            <form method="post" action="/admin/tomorrow/add-offer" class="stack-form">
+              <input type="hidden" name="offer_type" value="MAIN">
+
+              <select name="recipe_id" required>
+                <option value="">Choisir un plat</option>
+                {% for recipe in recipes %}
+                  <option value="{{ recipe['id'] }}">{{ recipe['name'] }}</option>
+                {% endfor %}
+              </select>
+              <input type="hidden" name="date" value="{{ event['date'] }}">
+              <input type="number" name="max_per_person" min="1" value="1" required>
+
+              <button class="btn" type="submit">Ajouter</button>
+            </form>
+
+            <div class="offer-list">
+              {% if mains|length == 0 %}
+                <div class="muted">Aucun plat principal configuré.</div>
+              {% else %}
+                {% for main in mains %}
+                  <div class="offer-item">
+                    <div>
+                      <strong>{{ main["label"] }}</strong>
+                      <div class="muted">Max/pers : {{ main["max_per_person"] }}</div>
+                    </div>
+
+                    <div class="offer-item__actions">
+                      <a class="btn secondary small" href="/admin/offers">Gérer</a>
+                    </div>
+                  </div>
+                {% endfor %}
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="offer-column">
+            <h3>Accompagnements</h3>
+
+            <form method="post" action="/admin/tomorrow/add-offer" class="stack-form">
+              <input type="hidden" name="offer_type" value="SIDE">
+
+              <select name="food_id" required>
+                <option value="">Choisir un accompagnement</option>
+                {% for food in foods %}
+                  <option value="{{ food['id'] }}">{{ food['name'] }}</option>
+                {% endfor %}
+              </select>
+              <input type="hidden" name="date" value="{{ event['date'] }}">
+              <input type="number" name="max_per_person" min="1" value="1" required>
+
+              <button class="btn" type="submit">Ajouter</button>
+            </form>
+
+            <div class="offer-list">
+              {% if sides|length == 0 %}
+                <div class="muted">Aucun accompagnement configuré.</div>
+              {% else %}
+                {% for side in sides %}
+                  <div class="offer-item">
+                    <div>
+                      <strong>{{ side["label"] }}</strong>
+                      <div class="muted">Max/pers : {{ side["max_per_person"] }}</div>
+                    </div>
+
+                    <div class="offer-item__actions">
+                      <a class="btn secondary small" href="/admin/offers">Gérer</a>
+                    </div>
+                  </div>
+                {% endfor %}
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- RESERVATIONS LIVE -->
+    <section class="card">
+      <div class="block-head">
+        <h2>🧾 Réservations reçues</h2>
+        <p>Suivi en direct des commandes pour demain.</p>
       </div>
-    {% else %}
-      <div class="muted">Aucun item dans le menu.</div>
-    {% endif %}
-  </div>
 
-  <!-- Offres configurées -->
-  <div class="grid">
-
-    <!-- Mains -->
-    <div class="card">
-      <h2 class="card-title">🍳 Plats (MAIN)</h2>
-      {% if mains|length == 0 %}
-        <div class="muted">Aucun plat configuré.</div>
+      {% if snapshot["reservations"]|length == 0 %}
+        <div class="empty-state">Aucune réservation pour l’instant.</div>
       {% else %}
-        <div class="list">
-          {% for o in mains %}
-            <div class="item">
-              <div class="left">
-                <div class="name">{{ o["label"] }}</div>
-                <div class="meta">
-                  <span class="muted">Max/pers :</span> {{ o["max_per_person"] }}
-                  · <span class="muted">Actif :</span> {{ "Oui" if o["is_active"] else "Non" }}
-                </div>
+        <div class="reservation-list">
+          {% for r in snapshot["reservations"] %}
+            <div class="reservation-item">
+              <div class="reservation-item__top">
+                <strong>{{ r["name"] }}</strong>
+                <span class="muted">Ramène : {{ r["bring"] or "—" }}</span>
+              </div>
+
+              <div class="line-badges">
+                {% for l in r["lines"] %}
+                  <span class="line-badge {% if l['type'] == 'MAIN' %}main{% else %}side{% endif %}">
+                    <span class="qty">{{ l["qty"] }}</span>
+                    {{ l["label"] }}
+                  </span>
+                {% endfor %}
               </div>
             </div>
           {% endfor %}
         </div>
       {% endif %}
-      <div style="margin-top:12px">
-        <a class="btn secondary" href="/admin/offers">Modifier</a>
-      </div>
-    </div>
+    </section>
 
-    <!-- Sides -->
-    <div class="card">
-      <h2 class="card-title">🥖 Accompagnements (SIDE)</h2>
-      {% if sides|length == 0 %}
-        <div class="muted">Aucun accompagnement configuré.</div>
-      {% else %}
-        <div class="list">
-          {% for o in sides %}
-            <div class="item">
-              <div class="left">
-                <div class="name">{{ o["label"] }}</div>
-                <div class="meta">
-                  <span class="muted">Max/pers :</span> {{ o["max_per_person"] }}
-                  · <span class="muted">Actif :</span> {{ "Oui" if o["is_active"] else "Non" }}
-                </div>
-              </div>
-            </div>
-          {% endfor %}
+    <!-- PREPARATION + STOCKS -->
+    <div class="two-col-layout">
+      <section class="card">
+        <div class="block-head">
+          <h2>📦 Totaux de préparation</h2>
+          <p>Quantités finales à prévoir pour demain.</p>
         </div>
-      {% endif %}
-      <div style="margin-top:12px">
-        <a class="btn secondary" href="/admin/offers">Modifier</a>
-      </div>
+
+        <div class="prep-grid">
+          <div class="prep-box">
+            <h3>Plats</h3>
+            {% if snapshot["totals"]["mains"] %}
+              <ul>
+                {% for label, qty in snapshot["totals"]["mains"].items() %}
+                  <li>{{ label }} : <strong>{{ qty }}</strong></li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <div class="muted">Aucun plat réservé pour l’instant.</div>
+            {% endif %}
+          </div>
+
+          <div class="prep-box">
+            <h3>Accompagnements</h3>
+            {% if snapshot["totals"]["sides"] %}
+              <ul>
+                {% for label, qty in snapshot["totals"]["sides"].items() %}
+                  <li>{{ label }} : <strong>{{ qty }}</strong></li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <div class="muted">Aucun accompagnement réservé pour l’instant.</div>
+            {% endif %}
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="block-head">
+          <h2>⚠️ Stocks critiques</h2>
+          <p>Bloc préparé pour la future gestion des stocks.</p>
+        </div>
+
+        <div class="empty-state">
+          Vérification des stocks à connecter dans la prochaine phase.
+        </div>
+      </section>
     </div>
 
   </div>
-
-</div>
-<script>
-  // ==========================
-  // PWA : service worker
-  // ==========================
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("/service-worker.js")
-        .then((registration) => {
-          console.log("Service worker enregistré :", registration.scope);
-        })
-        .catch((error) => {
-          console.log("Erreur service worker :", error);
-        });
-    });
-  }  
-</script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 </body>
 </html>

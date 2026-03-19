@@ -1060,3 +1060,243 @@ input:focus, textarea:focus{border-color:rgba(47,129,247,.9); box-shadow:0 0 0 4
     flex: 1;
   }
 }
+
+/* ==========================
+   ADMIN DEMAIN V2
+========================== */
+
+.admin-tomorrow-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* HEADER */
+
+.ops-header {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ops-header__main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ops-header__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ops-status {
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.ops-status--ok {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+.ops-status--warn {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+}
+
+/* HEALTH */
+
+.ops-health {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.mini-card {
+  background: rgba(255, 255, 255, 0.03);
+  padding: 14px;
+  border-radius: 14px;
+}
+
+.mini-card__label {
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.mini-card strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 16px;
+}
+
+/* CHECKLIST */
+
+.checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.checklist-item {
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.checklist-item.done {
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.checklist-item.doing {
+  background: rgba(245, 158, 11, 0.1);
+}
+
+/* LAYOUT */
+
+.two-col-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .two-col-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* BLOCK HEAD */
+
+.block-head {
+  margin-bottom: 12px;
+}
+
+.block-head h2 {
+  margin-bottom: 4px;
+}
+
+.block-head p {
+  font-size: 13px;
+  opacity: 0.6;
+}
+
+/* AGENTS */
+
+.agent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agent-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.agent-name {
+  font-weight: 600;
+}
+
+.agent-meta {
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.inline-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+/* OFFERS */
+
+.offer-columns {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.offer-column h3 {
+  margin-bottom: 10px;
+}
+
+.stack-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.stack-form select,
+.stack-form input {
+  flex: 1;
+}
+
+.offer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.offer-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.offer-item__actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* RESERVATIONS */
+
+.reservation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.reservation-item {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.reservation-item__top {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+/* PREP */
+
+.prep-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.prep-box {
+  background: rgba(255, 255, 255, 0.02);
+  padding: 12px;
+  border-radius: 10px;
+}
+
+/* EMPTY */
+
+.empty-state {
+  padding: 16px;
+  text-align: center;
+  opacity: 0.6;
+}
