@@ -1300,3 +1300,28 @@ input:focus, textarea:focus{border-color:rgba(47,129,247,.9); box-shadow:0 0 0 4
   text-align: center;
   opacity: 0.6;
 }
+.inline-success {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  font-size: 14px;
+  font-weight: 600;
+}
+.inline-success {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 1;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.inline-success.fade-out {
+  opacity: 0;
+  transform: translateY(-4px);
+}

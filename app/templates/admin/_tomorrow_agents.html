@@ -1,25 +1,44 @@
-<div id="tomorrow-agents-block">
-  <h3>👥 Agents de demain</h3>
-
+<section class="card" id="tomorrow-agents-block">
+  <div class="block-head">
+    <h2>👥 Agents de demain</h2>
+    <p>Sélectionne les collègues concernés pour demain.</p>
+  </div>
+    {% if save_success %}
+        <div class="inline-success js-auto-hide-success">✅ Agents mis à jour</div>
+    {% endif %}
   <form
+    method="post"
+    action="/admin/tomorrow/update-agents"
     hx-post="/admin/tomorrow/update-agents"
     hx-target="#tomorrow-agents-block"
     hx-swap="outerHTML"
   >
-    <input type="hidden" name="date" value="{{ event.date }}" />
+    <input type="hidden" name="shift_date" value="{{ event['date'] }}">
 
-    {% for agent in agents %}
-      <label style="display:block; margin-bottom:6px;">
-        <input
-          type="checkbox"
-          name="agent_ids"
-          value="{{ agent.id }}"
-          {% if agent.id in working_agent_ids %}checked{% endif %}
-        />
-        {{ agent.name }}
-      </label>
-    {% endfor %}
+    <div class="agent-list">
+      {% for agent in agents %}
+        <label class="agent-row">
+          <div>
+            <div class="agent-name">{{ agent["name"] }}</div>
+            <div class="agent-meta">{{ agent["phone"] or "Pas de téléphone" }}</div>
+          </div>
 
-    <button type="submit">💾 Enregistrer</button>
+          <div class="agent-actions">
+            <input
+              type="checkbox"
+              name="working_agent_ids"
+              value="{{ agent['id'] }}"
+              {% if agent["selected_tomorrow"] %}checked{% endif %}
+            >
+            <span>Travaille</span>
+          </div>
+        </label>
+      {% endfor %}
+    </div>
+
+    <div class="inline-actions">
+      <button class="btn" type="submit">Enregistrer</button>
+      <a class="btn secondary" href="/admin/agents-tomorrow">Vue complète</a>
+    </div>
   </form>
-</div>
+</section>

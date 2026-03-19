@@ -1,0 +1,104 @@
+<section class="card" id="tomorrow-offers-block">
+  <div class="block-head">
+    <h2>🍳 Offre de demain</h2>
+    <p>Compose l’offre directement depuis cette page.</p>
+  </div>
+
+  {% if save_success %}
+    <div class="inline-success js-auto-hide-success">✅ Offre mise à jour</div>
+  {% endif %}
+
+  <div class="offer-columns">
+    <div class="offer-column">
+      <h3>Plats principaux</h3>
+
+      <form
+        method="post"
+        action="/admin/tomorrow/add-offer"
+        class="stack-form"
+        hx-post="/admin/tomorrow/add-offer"
+        hx-target="#tomorrow-offers-block"
+        hx-swap="outerHTML"
+      >
+        <input type="hidden" name="offer_type" value="MAIN">
+        <input type="hidden" name="date" value="{{ event['date'] }}">
+
+        <select name="recipe_id" required>
+          <option value="">Choisir un plat</option>
+          {% for recipe in recipes %}
+            <option value="{{ recipe['id'] }}">{{ recipe['name'] }}</option>
+          {% endfor %}
+        </select>
+
+        <input type="number" name="max_per_person" min="1" value="1" required>
+
+        <button class="btn" type="submit">Ajouter</button>
+      </form>
+
+      <div class="offer-list">
+        {% if mains|length == 0 %}
+          <div class="muted">Aucun plat principal configuré.</div>
+        {% else %}
+          {% for main in mains %}
+            <div class="offer-item">
+              <div>
+                <strong>{{ main["label"] }}</strong>
+                <div class="muted">Max/pers : {{ main["max_per_person"] }}</div>
+              </div>
+
+              <div class="offer-item__actions">
+                <a class="btn secondary small" href="/admin/offers">Gérer</a>
+              </div>
+            </div>
+          {% endfor %}
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="offer-column">
+      <h3>Accompagnements</h3>
+
+      <form
+        method="post"
+        action="/admin/tomorrow/add-offer"
+        class="stack-form"
+        hx-post="/admin/tomorrow/add-offer"
+        hx-target="#tomorrow-offers-block"
+        hx-swap="outerHTML"
+      >
+        <input type="hidden" name="offer_type" value="SIDE">
+        <input type="hidden" name="date" value="{{ event['date'] }}">
+
+        <select name="food_id" required>
+          <option value="">Choisir un accompagnement</option>
+          {% for food in foods %}
+            <option value="{{ food['id'] }}">{{ food['name'] }}</option>
+          {% endfor %}
+        </select>
+
+        <input type="number" name="max_per_person" min="1" value="1" required>
+
+        <button class="btn" type="submit">Ajouter</button>
+      </form>
+
+      <div class="offer-list">
+        {% if sides|length == 0 %}
+          <div class="muted">Aucun accompagnement configuré.</div>
+        {% else %}
+          {% for side in sides %}
+            <div class="offer-item">
+              <div>
+                <strong>{{ side["label"] }}</strong>
+                <div class="muted">Max/pers : {{ side["max_per_person"] }}</div>
+              </div>
+
+              <div class="offer-item__actions">
+                <a class="btn secondary small" href="/admin/offers">Gérer</a>
+              </div>
+            </div>
+          {% endfor %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>

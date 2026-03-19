@@ -670,6 +670,27 @@ async def admin_tomorrow_update_agents(request: Request):
     if shift_date:
         set_working_agents_for_date(shift_date, working_agent_ids)
 
+    # Recharger les données nécessaires au partial
+    event = get_event(shift_date)
+    agents = list_agents(active_only=True)
+    selected_ids = list_working_agent_ids(shift_date)
+
+    for agent in agents:
+        agent["selected_tomorrow"] = agent["id"] in selected_ids
+
+    # Si la requête vient de HTMX, on renvoie juste le bloc agents
+    if request.headers.get("HX-Request") == "true":
+        return _templates(request).TemplateResponse(
+            "admin/_tomorrow_agents.html",
+            {
+                "request": request,
+                "event": event,
+                "agents": agents,
+                "save_success": True,
+            },
+        )
+
+    # Fallback classique si HTMX n'est pas chargé
     return RedirectResponse(url="/admin/tomorrow", status_code=303)
 
 
@@ -708,6 +729,29 @@ async def admin_tomorrow_add_offer(request: Request):
             add_offer_side(event_date, food_id, max_per_person)
         except (TypeError, ValueError):
             pass
+
+    # Recharger les données utiles au partial
+    event = get_event(event_date)
+    offers = list_offers_for_date(event_date)
+    mains = [o for o in offers if o["offer_type"] == "MAIN"]
+    sides = [o for o in offers if o["offer_type"] == "SIDE"]
+    recipes = list_recipes(active_only=True)
+    foods = list_foods(active_only=True)
+
+    # Si la requête vient de HTMX, renvoyer juste le bloc Offre
+    if request.headers.get("HX-Request") == "true":
+        return _templates(request).TemplateResponse(
+            "admin/_tomorrow_offers.html",
+            {
+                "request": request,
+                "event": event,
+                "mains": mains,
+                "sides": sides,
+                "recipes": recipes,
+                "foods": foods,
+                "save_success": True,
+            },
+        )
 
     return RedirectResponse(url="/admin/tomorrow", status_code=303)
 

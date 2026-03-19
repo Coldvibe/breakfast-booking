@@ -110,127 +110,9 @@
     <!-- CONFIGURATION RAPIDE -->
     <div class="two-col-layout">
 
-      <!-- AGENTS DE DEMAIN -->
-      <section class="card">
-        <div class="block-head">
-          <h2>👥 Agents de demain</h2>
-          <p>Sélectionne les collègues concernés pour demain.</p>
-        </div>
-
-        <form method="post" action="/admin/tomorrow/update-agents">
-          <div class="agent-list">
-            {% for agent in agents %}
-              <label class="agent-row">
-                <div>
-                  <div class="agent-name">{{ agent["name"] }}</div>
-                  <div class="agent-meta">{{ agent["phone"] or "Pas de téléphone" }}</div>
-                </div>
-                <input type="hidden" name="shift_date" value="{{ event['date'] }}">
-                <div class="agent-actions">
-                  <input
-                    type="checkbox"
-                    name="working_agent_ids"
-                    value="{{ agent['id'] }}"
-                    {% if agent["selected_tomorrow"] %}checked{% endif %}
-                  >
-                  <span>Travaille</span>
-                </div>
-              </label>
-            {% endfor %}
-          </div>
-
-          <div class="inline-actions">
-            <button class="btn" type="submit">Enregistrer</button>
-            <a class="btn secondary" href="/admin/agents-tomorrow">Vue complète</a>
-          </div>
-        </form>
-      </section>
-
-      <!-- OFFRE DE DEMAIN -->
-      <section class="card">
-        <div class="block-head">
-          <h2>🍳 Offre de demain</h2>
-          <p>Compose l’offre directement depuis cette page.</p>
-        </div>
-
-        <div class="offer-columns">
-          <div class="offer-column">
-            <h3>Plats principaux</h3>
-
-            <form method="post" action="/admin/tomorrow/add-offer" class="stack-form">
-              <input type="hidden" name="offer_type" value="MAIN">
-
-              <select name="recipe_id" required>
-                <option value="">Choisir un plat</option>
-                {% for recipe in recipes %}
-                  <option value="{{ recipe['id'] }}">{{ recipe['name'] }}</option>
-                {% endfor %}
-              </select>
-              <input type="hidden" name="date" value="{{ event['date'] }}">
-              <input type="number" name="max_per_person" min="1" value="1" required>
-
-              <button class="btn" type="submit">Ajouter</button>
-            </form>
-
-            <div class="offer-list">
-              {% if mains|length == 0 %}
-                <div class="muted">Aucun plat principal configuré.</div>
-              {% else %}
-                {% for main in mains %}
-                  <div class="offer-item">
-                    <div>
-                      <strong>{{ main["label"] }}</strong>
-                      <div class="muted">Max/pers : {{ main["max_per_person"] }}</div>
-                    </div>
-
-                    <div class="offer-item__actions">
-                      <a class="btn secondary small" href="/admin/offers">Gérer</a>
-                    </div>
-                  </div>
-                {% endfor %}
-              {% endif %}
-            </div>
-          </div>
-
-          <div class="offer-column">
-            <h3>Accompagnements</h3>
-
-            <form method="post" action="/admin/tomorrow/add-offer" class="stack-form">
-              <input type="hidden" name="offer_type" value="SIDE">
-
-              <select name="food_id" required>
-                <option value="">Choisir un accompagnement</option>
-                {% for food in foods %}
-                  <option value="{{ food['id'] }}">{{ food['name'] }}</option>
-                {% endfor %}
-              </select>
-              <input type="hidden" name="date" value="{{ event['date'] }}">
-              <input type="number" name="max_per_person" min="1" value="1" required>
-
-              <button class="btn" type="submit">Ajouter</button>
-            </form>
-
-            <div class="offer-list">
-              {% if sides|length == 0 %}
-                <div class="muted">Aucun accompagnement configuré.</div>
-              {% else %}
-                {% for side in sides %}
-                  <div class="offer-item">
-                    <div>
-                      <strong>{{ side["label"] }}</strong>
-                      <div class="muted">Max/pers : {{ side["max_per_person"] }}</div>
-                    </div>
-
-                    <div class="offer-item__actions">
-                      <a class="btn secondary small" href="/admin/offers">Gérer</a>
-                    </div>
-                  </div>
-                {% endfor %}
-              {% endif %}
-            </div>
-          </div>
-        </div>
-      </section>
+      {% include "admin/_tomorrow_agents.html" %}
+      {% include "admin/_tomorrow_offers.html" %}
+      
     </div>
 
     <!-- RESERVATIONS LIVE -->
@@ -316,5 +198,25 @@
 
   </div>
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <script>
+  function setupAutoHideSuccessMessages() {
+    document.querySelectorAll(".js-auto-hide-success").forEach((el) => {
+      if (el.dataset.processed === "true") return;
+
+      el.dataset.processed = "true";
+
+      setTimeout(() => {
+        el.classList.add("fade-out");
+
+        setTimeout(() => {
+          el.remove();
+        }, 300);
+      }, 2000);
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", setupAutoHideSuccessMessages);
+  document.body.addEventListener("htmx:afterSwap", setupAutoHideSuccessMessages);
+</script>
 </body>
 </html>
