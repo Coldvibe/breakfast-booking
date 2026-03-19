@@ -19,18 +19,28 @@
   </div>
 
   <div class="ops-header__actions">
-    <form method="post" action="/admin/tomorrow/toggle-open">
-      <button class="btn" type="submit">
-        {% if event["open"] %}Fermer les réservations{% else %}Ouvrir les réservations{% endif %}
-      </button>
+    <form
+        method="post"
+        action="/admin/tomorrow/toggle-open"
+        hx-post="/admin/tomorrow/toggle-open"
+        hx-target="#tomorrow-top-block"
+        hx-swap="outerHTML"
+    >
+        <button class="btn" type="submit">
+            {% if event["open"] %}Fermer les réservations{% else %}Ouvrir les réservations{% endif %}
+        </button>
     </form>
 
-    <form method="post" action="/admin/tomorrow/toggle-planned">
-      <button class="btn secondary" type="submit">
-        {% if event.get("is_planned", True) %}Désactiver petit-déjeuner{% else %}Activer petit-déjeuner{% endif %}
-      </button>
+    <form
+        method="post"
+        action="/admin/tomorrow/toggle-planned"
+        hx-post="/admin/tomorrow/toggle-planned"
+        hx-target="#tomorrow-top-block"
+        hx-swap="outerHTML"
+    >
+        <button class="btn secondary" type="submit">
+            {% if event.get("is_planned", True) %}Désactiver petit-déjeuner{% else %}Activer petit-déjeuner{% endif %}
+        </button>
     </form>
-
-    <a class="btn ghost" href="/admin">Retour dashboard</a>
   </div>
 </section>

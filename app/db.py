@@ -681,27 +681,35 @@ def reservation_exists_for_event(event_id: int, name: str) -> bool:
             (event_id, name_norm),
         ).fetchone()
         return row is not None
+
+def get_recipe(recipe_id: int) -> dict | None:
+    with get_conn() as conn:
+        r = conn.execute(
+            "SELECT id, name, is_active FROM recipes WHERE id = ?",
+            (recipe_id,),
+        ).fetchone()
+        if not r:
+            return None
+        return {"id": r["id"], "name": r["name"], "is_active": bool(r["is_active"])}
 def get_tomorrow_admin_snapshot(event_date: str) -> dict:
     """
-    Snapshot "admin demain" prêt à afficher sur le dashboard.
-    Centralise toutes les données utiles au lieu d'éparpiller les calls dans le router.
+    Snapshot "cockpit admin" pour une date donnée (en pratique : demain).
+    Centralise les données utiles au dashboard admin.
     """
     event = get_event(event_date)
-    if not event:
-        return {
-            "event": None,
-            "offers": {"mains": [], "sides": []},
-            "working_agents": [],
-            "reservations": [],
-            "totals": {"mains": [], "sides": []},
-            "brings": [],
-        }
 
     offers = list_active_offers_for_date(event_date)
-    working_agents = list_working_agents_for_date(event_date)
-    reservations = list_reservations_with_lines(event["id"])
+    mains = offers.get("mains", [])
+    sides = offers.get("sides", [])
 
-    # --- Agrégations pour "vue globale" ---
+    working_agents = list_working_agents_for_date(event_date)
+
+    reservations = []
+    if event:
+        reservations = list_reservations_with_lines(event["id"])
+
+    total_reservations = len(reservations)
+
     totals_main: dict[str, int] = {}
     totals_side: dict[str, int] = {}
     brings: list[str] = []
@@ -712,73 +720,14 @@ def get_tomorrow_admin_snapshot(event_date: str) -> dict:
             brings.append(bring)
 
         for line in (r.get("lines") or []):
-            label = line.get("label") or ""
-            qty = int(line.get("qty") or 0)
-            if qty <= 0 or not label:
-                continue
-
-            if line.get("type") == "MAIN":
-                totals_main[label] = totals_main.get(label, 0) + qty
-            else:
-                totals_side[label] = totals_side.get(label, 0) + qty
-
-    # On trie pour un affichage stable
-    totals_main_list = [{"label": k, "qty": totals_main[k]} for k in sorted(totals_main.keys())]
-    totals_side_list = [{"label": k, "qty": totals_side[k]} for k in sorted(totals_side.keys())]
-
-    return {
-        "event": event,
-        "offers": offers,
-        "working_agents": working_agents,
-        "reservations": reservations,
-        "totals": {"mains": totals_main_list, "sides": totals_side_list},
-        "brings": brings,
-    }
-def get_tomorrow_admin_snapshot(event_date: str) -> dict:
-    """
-    Snapshot "cockpit admin" pour une date donnée (en pratique: demain).
-    On centralise ici ce que le dashboard admin doit afficher en un coup d'œil.
-
-    Retour attendu (dict):
-      - event: infos event (date, open, is_planned, menu...)
-      - offers: {"mains": [...], "sides": [...]}
-      - working_agents: liste des agents planifiés (shifts) pour la date
-      - reservations: liste des réservations avec lignes (MAIN/SIDE)
-      - kpis: petits compteurs utiles
-      - totals: totaux par label (pratique pour prévoir les quantités)
-    """
-    # 1) Event
-    event = get_event(event_date)
-
-    # 2) Offres actives (mains / sides)
-    offers = list_active_offers_for_date(event_date)  # déjà présent chez toi
-    mains = offers.get("mains", [])
-    sides = offers.get("sides", [])
-
-    # 3) Agents de shift (si tu as coché des agents pour demain)
-    working_agents = list_working_agents_for_date(event_date)
-
-    # 4) Réservations avec lignes (si l'event existe)
-    reservations = []
-    if event:
-        reservations = list_reservations_with_lines(event["id"])
-
-    # 5) KPIs + totaux
-    total_reservations = len(reservations)
-
-    totals_main: dict[str, int] = {}
-    totals_side: dict[str, int] = {}
-
-    for r in reservations:
-        for line in (r.get("lines") or []):
             label = line.get("label") or "?"
             qty = int(line.get("qty") or 0)
-            t = line.get("type")
+            line_type = line.get("type")
 
             if qty <= 0:
                 continue
 
-            if t == "MAIN":
+            if line_type == "MAIN":
                 totals_main[label] = totals_main.get(label, 0) + qty
             else:
                 totals_side[label] = totals_side.get(label, 0) + qty
@@ -801,19 +750,10 @@ def get_tomorrow_admin_snapshot(event_date: str) -> dict:
             "mains": totals_main,
             "sides": totals_side,
         },
+        "brings": brings,
     }
 
     return snapshot
-def get_recipe(recipe_id: int) -> dict | None:
-    with get_conn() as conn:
-        r = conn.execute(
-            "SELECT id, name, is_active FROM recipes WHERE id = ?",
-            (recipe_id,),
-        ).fetchone()
-        if not r:
-            return None
-        return {"id": r["id"], "name": r["name"], "is_active": bool(r["is_active"])}
-
 
 def update_recipe(recipe_id: int, name: str, is_active: bool) -> None:
     clean_name = name.strip()
@@ -854,7 +794,7 @@ def update_event_flags(event_date: str, open_value: int = None, is_planned_value
 
     with get_conn() as conn:
         conn.execute(query, values)
-        
+
 def delete_offer(offer_id: int) -> None:
     with get_conn() as conn:
         conn.execute(

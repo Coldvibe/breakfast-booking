@@ -1,0 +1,92 @@
+<div id="tomorrow-bottom-block">
+  <section class="card">
+    <div class="block-head">
+      <h2>🧾 Réservations reçues</h2>
+      <p>Suivi en direct des commandes pour demain.</p>
+    </div>
+
+    {% if snapshot["reservations"]|length == 0 %}
+      <div class="empty-state">Aucune réservation pour l’instant.</div>
+    {% else %}
+      <div class="reservation-list">
+        {% for r in snapshot["reservations"] %}
+          <div class="reservation-item">
+            <div class="reservation-item__top">
+              <strong>{{ r["name"] }}</strong>
+              <span class="muted">Ramène : {{ r["bring"] or "—" }}</span>
+            </div>
+
+            <div class="line-badges">
+              {% for l in r["lines"] %}
+                <span class="line-badge {% if l['type'] == 'MAIN' %}main{% else %}side{% endif %}">
+                  <span class="qty">{{ l["qty"] }}</span>
+                  {{ l["label"] }}
+                </span>
+              {% endfor %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if snapshot["brings"] %}
+      <div class="block-head" style="margin-top:16px;">
+        <h3>🎒 Ce que les collègues ramènent</h3>
+      </div>
+
+      <div class="reservation-list">
+        {% for bring in snapshot["brings"] %}
+          <div class="reservation-item">{{ bring }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </section>
+
+  <div class="two-col-layout">
+    <section class="card">
+      <div class="block-head">
+        <h2>📦 Totaux de préparation</h2>
+        <p>Quantités finales à prévoir pour demain.</p>
+      </div>
+
+      <div class="prep-grid">
+        <div class="prep-box">
+          <h3>Plats</h3>
+          {% if snapshot["totals"]["mains"] %}
+            <ul>
+              {% for label, qty in snapshot["totals"]["mains"].items() %}
+                <li>{{ label }} : <strong>{{ qty }}</strong></li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <div class="muted">Aucun plat réservé pour l’instant.</div>
+          {% endif %}
+        </div>
+
+        <div class="prep-box">
+          <h3>Accompagnements</h3>
+          {% if snapshot["totals"]["sides"] %}
+            <ul>
+              {% for label, qty in snapshot["totals"]["sides"].items() %}
+                <li>{{ label }} : <strong>{{ qty }}</strong></li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <div class="muted">Aucun accompagnement réservé pour l’instant.</div>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="block-head">
+        <h2>⚠️ Stocks critiques</h2>
+        <p>Bloc préparé pour la future gestion des stocks.</p>
+      </div>
+
+      <div class="empty-state">
+        Vérification des stocks à connecter dans la prochaine phase.
+      </div>
+    </section>
+  </div>
+</div>

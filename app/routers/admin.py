@@ -164,28 +164,7 @@ def admin_dashboard(request: Request):
     if guard:
         return guard
 
-    # Flash message éventuel
-    flash_data = request.app.state.pop_flash(request)
-
-    event_date = _tomorrow_str()
-    tomorrow_date = date.today() + timedelta(days=1)
-
-    # On garantit l’event de demain
-    ensure_event_for_date(
-        event_date,
-        request.app.state.menu_for_date(tomorrow_date)
-    )
-
-    snapshot = get_tomorrow_admin_snapshot(event_date)
-
-    return request.app.state.templates.TemplateResponse(
-        "admin_dashboard.html",
-        {
-            "request": request,
-            "flash": flash_data,
-            "snapshot": snapshot,
-        },
-    )
+    return RedirectResponse(url="/admin/tomorrow", status_code=303)
 
 
 # -------------------------
@@ -631,6 +610,30 @@ def admin_tomorrow_toggle_open(request: Request):
     new_open = 0 if event["open"] else 1
     update_event_flags(event_date, open_value=new_open)
 
+    if request.headers.get("HX-Request") == "true":
+        event = get_event(event_date)
+        snapshot = get_tomorrow_admin_snapshot(event_date)
+
+        offers = list_offers_for_date(event_date)
+        mains = [o for o in offers if o["offer_type"] == "MAIN"]
+        sides = [o for o in offers if o["offer_type"] == "SIDE"]
+
+        agents = list_agents(active_only=True)
+        working_ids = list_working_agent_ids(event_date)
+
+        return _templates(request).TemplateResponse(
+            "admin/_tomorrow_top.html",
+            {
+                "request": request,
+                "event": event,
+                "snapshot": snapshot,
+                "mains": mains,
+                "sides": sides,
+                "agents": agents,
+                "working_ids": working_ids,
+            },
+        )
+
     return RedirectResponse(url="/admin/tomorrow", status_code=303)
 
 
@@ -648,8 +651,31 @@ def admin_tomorrow_toggle_planned(request: Request):
     new_planned = 0 if current_planned else 1
     update_event_flags(event_date, is_planned_value=new_planned)
 
-    return RedirectResponse(url="/admin/tomorrow", status_code=303)
+    if request.headers.get("HX-Request") == "true":
+        event = get_event(event_date)
+        snapshot = get_tomorrow_admin_snapshot(event_date)
 
+        offers = list_offers_for_date(event_date)
+        mains = [o for o in offers if o["offer_type"] == "MAIN"]
+        sides = [o for o in offers if o["offer_type"] == "SIDE"]
+
+        agents = list_agents(active_only=True)
+        working_ids = list_working_agent_ids(event_date)
+
+        return _templates(request).TemplateResponse(
+            "admin/_tomorrow_top.html",
+            {
+                "request": request,
+                "event": event,
+                "snapshot": snapshot,
+                "mains": mains,
+                "sides": sides,
+                "agents": agents,
+                "working_ids": working_ids,
+            },
+        )
+
+    return RedirectResponse(url="/admin/tomorrow", status_code=303)
 
 @router.post("/admin/tomorrow/update-agents")
 async def admin_tomorrow_update_agents(request: Request):
@@ -904,5 +930,26 @@ def admin_tomorrow_top(request: Request):
             "sides": sides,
             "agents": agents,
             "working_ids": working_ids,
+        },
+    )
+
+@router.get("/admin/tomorrow/bottom")
+def admin_tomorrow_bottom(request: Request):
+    guard = require_admin(request)
+    if guard:
+        return guard
+
+    event_date = _tomorrow_str()
+    ensure_event_for_date(event_date, _menu_for_tomorrow(request))
+
+    event = get_event(event_date)
+    snapshot = get_tomorrow_admin_snapshot(event_date)
+
+    return _templates(request).TemplateResponse(
+        "admin/_tomorrow_bottom.html",
+        {
+            "request": request,
+            "event": event,
+            "snapshot": snapshot,
         },
     )
