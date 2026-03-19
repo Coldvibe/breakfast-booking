@@ -147,11 +147,10 @@ def admin_login_post(
     )
 
 
-@router.post("/admin/logout")
+@router.get("/admin/logout")
 def admin_logout(request: Request):
     request.session.clear()
-    return RedirectResponse("/", status_code=303)
-
+    return RedirectResponse("/admin/login", status_code=303)
 
 # -------------------------
 # Dashboard admin

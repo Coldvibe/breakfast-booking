@@ -3,62 +3,102 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Admin — Login</title>
-  <style>
-    body{font-family:system-ui;background:#0b0f14;color:#e8eef6;margin:0}
-    .wrap{max-width:520px;margin:0 auto;padding:24px}
-    .card{background:#121a24;border:1px solid #1d2a3a;border-radius:16px;padding:18px}
-    input,button{width:100%;padding:12px;border-radius:12px;border:1px solid #24344a;background:#0b0f14;color:#e8eef6}
-    button{background:#2f81f7;border:none;font-weight:700;cursor:pointer}
-    .muted{opacity:.75}
-    .error{margin-top:10px;color:#ffb4b4}
-  </style>
-    <link rel="manifest" href="/static/manifest.json">
-  <meta name="theme-color" content="#0b0f14">
-  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Zack & Snack">
+  <title>Zack & Snack – Connexion Admin</title>
+  <link rel="stylesheet" href="/static/css/app.css">
 </head>
-<body>
-<div class="wrap">
-  <div class="card">
-    <h2>Connexion Admin</h2>
-    <div class="muted">Accès réservé.</div>
+<body class="admin-login-page">
+  <div class="admin-login-shell">
 
-    <form method="post" action="/admin/login" style="margin-top:14px">
-      <label>Utilisateur</label>
-      <input name="username" autocomplete="username" required>
+    <div class="admin-login-card">
+      <div class="admin-login-brand">
+        <div class="admin-login-brand__icon" aria-hidden="true">
+          <svg viewBox="0 0 64 64" width="28" height="28">
+            <path d="M32 6 C20 6 10 18 10 30 c0 12 10 22 22 22 s22-10 22-22 C54 18 44 6 32 6Z" fill="#ffffff" opacity="0.95"/>
+            <circle cx="32" cy="32" r="8" fill="#facc15"></circle>
+          </svg>
+        </div>
 
-      <div style="height:10px"></div>
+        <div>
+          <div class="admin-login-brand__title">Zack & Snack</div>
+          <div class="admin-login-brand__subtitle">Cockpit administrateur</div>
+        </div>
+      </div>
 
-      <label>Mot de passe</label>
-      <input name="password" type="password" autocomplete="current-password" required>
-
-      <div style="height:14px"></div>
-      <button type="submit">Se connecter</button>
+      <div class="admin-login-head">
+        <h1>Connexion Admin</h1>
+        <p>Accès réservé à la gestion du petit-déjeuner de demain.</p>
+      </div>
 
       {% if error %}
-        <div class="error">{{ error }}</div>
+        <div class="admin-login-alert">
+          {{ error }}
+        </div>
       {% endif %}
-    </form>
+
+      <form method="post" action="/admin/login" class="admin-login-form">
+        <div class="form-group">
+          <label for="username">Utilisateur</label>
+          <input
+            id="username"
+            name="username"
+            type="text"
+            autocomplete="username"
+            required
+            autofocus
+            placeholder="Nom d’utilisateur"
+          >
+        </div>
+
+        <div class="form-group">
+  <label for="password">Mot de passe</label>
+
+  <div class="password-field">
+    <input
+      id="password"
+      name="password"
+      type="password"
+      autocomplete="current-password"
+      required
+      placeholder="Mot de passe"
+    >
+
+    <button
+      type="button"
+      class="password-toggle"
+      aria-label="Afficher le mot de passe"
+      onclick="togglePasswordVisibility()"
+    >
+      👁️
+    </button>
   </div>
 </div>
-<script>
-  // ==========================
-  // PWA : service worker
-  // ==========================
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("/service-worker.js")
-        .then((registration) => {
-          console.log("Service worker enregistré :", registration.scope);
-        })
-        .catch((error) => {
-          console.log("Erreur service worker :", error);
-        });
-    });
-  }  
+
+        <button class="btn admin-login-submit" type="submit">
+          Se connecter
+        </button>
+      </form>
+
+      <div class="admin-login-footer">
+        <a href="/">← Retour à l’accueil</a>
+      </div>
+    </div>
+
+  </div>
+  <script>
+  function togglePasswordVisibility() {
+    const input = document.getElementById("password");
+    const btn = document.querySelector(".password-toggle");
+
+    if (!input) return;
+
+    if (input.type === "password") {
+      input.type = "text";
+      btn.textContent = "🙈";
+    } else {
+      input.type = "password";
+      btn.textContent = "👁️";
+    }
+  }
 </script>
 </body>
 </html>
