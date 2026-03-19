@@ -1558,3 +1558,61 @@ input:focus, textarea:focus{border-color:rgba(47,129,247,.9); box-shadow:0 0 0 4
 .password-toggle:hover {
   opacity: 1;
 }
+
+.admin-login-page {
+  min-height: 100vh;
+  background: radial-gradient(circle at 20% 20%, #0d1b2f, #050b16);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Force centrage même si autre CSS */
+body.admin-login-page {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.admin-login-shell {
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 24px;
+  display: block !important;
+}
+
+.admin-login-card {
+  width: 100%;
+  background: rgba(17, 28, 48, 0.96);
+  border-radius: 22px;
+  padding: 28px;
+  border: 1px solid rgba(90, 120, 200, 0.25);
+  backdrop-filter: blur(10px);
+}
+
+/* FIX CRITIQUE champ password */
+.password-field {
+  position: relative;
+  width: 100%;
+}
+
+.password-field input {
+  width: 100%;
+  padding-right: 44px !important;
+}
+
+/* bouton œil FIX */
+.password-toggle {
+  position: absolute !important;
+  right: 12px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+
+  background: transparent;
+  border: none;
+  cursor: pointer;
+
+  font-size: 18px;
+  color: #9fb4ff;
+}
