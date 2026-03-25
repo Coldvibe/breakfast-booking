@@ -9,35 +9,42 @@ import { Badge } from "../components/ui/badge";
 import { Plus, Package, Pencil, Check, X } from "lucide-react";
 import type { Ingredient } from "../types";
 import { toast } from "sonner";
+import { createFood, fetchDailyOfferState, updateFoodStock } from "../lib/api";
+
 
 export function StocksPage() {
-  const { ingredients, addIngredient, updateIngredient } = useApp();
+  const { ingredients, replaceBackendState } = useApp();
   const [newIngName, setNewIngName] = useState("");
   const [newIngUnit, setNewIngUnit] = useState("pièce");
   const [newIngStock, setNewIngStock] = useState("0");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editStock, setEditStock] = useState("");
 
-  const handleAddIngredient = () => {
+  const handleAddIngredient = async () => {
     if (!newIngName.trim()) {
       toast.error("Veuillez saisir un nom d'ingrédient");
       return;
     }
 
-    const newIngredient: Ingredient = {
-      id: `ing${Date.now()}`,
-      name: newIngName,
-      unit: newIngUnit,
-      stock: parseFloat(newIngStock) || 0,
-    };
+    try {
+      await createFood({
+        name: newIngName,
+        unit: newIngUnit,
+      });
 
-    addIngredient(newIngredient);
-    toast.success(`${newIngName} ajouté au stock`);
+      const refreshed = await fetchDailyOfferState();
+      replaceBackendState(refreshed.recipes, refreshed.dailyOffer, refreshed.ingredients);
 
-    // Reset form
-    setNewIngName("");
-    setNewIngUnit("pièce");
-    setNewIngStock("0");
+      toast.success(`${newIngName} ajouté au stock`);
+
+      // Reset form
+      setNewIngName("");
+      setNewIngUnit("pièce");
+      setNewIngStock("0");
+    } catch (error) {
+      console.error(error);
+      toast.error("Erreur lors de l'ajout de l'ingrédient");
+    }
   };
 
   const startEditing = (ingredient: Ingredient) => {
@@ -50,17 +57,32 @@ export function StocksPage() {
     setEditStock("");
   };
 
-  const saveStock = (id: string) => {
+  const saveStock = async (id: string) => {
     const newStock = parseFloat(editStock);
+
     if (isNaN(newStock) || newStock < 0) {
       toast.error("Stock invalide");
       return;
     }
 
-    updateIngredient(id, { stock: newStock });
-    toast.success("Stock mis à jour");
-    setEditingId(null);
-    setEditStock("");
+    try {
+      await updateFoodStock(id, newStock);
+
+      const refreshed = await fetchDailyOfferState();
+      replaceBackendState(
+        refreshed.recipes,
+        refreshed.dailyOffer,
+        refreshed.ingredients
+      );
+
+      toast.success("Stock mis à jour");
+
+      setEditingId(null);
+      setEditStock("");
+    } catch (error) {
+      console.error(error);
+      toast.error("Erreur mise à jour du stock");
+    }
   };
 
   const getStockColor = (stock: number) => {

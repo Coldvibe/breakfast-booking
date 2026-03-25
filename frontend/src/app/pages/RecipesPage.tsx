@@ -9,11 +9,13 @@ import { Badge } from "../components/ui/badge";
 import { Plus, Trash2, ChefHat, Minus } from "lucide-react";
 import type { Recipe, RecipeIngredient } from "../types";
 import { toast } from "sonner";
+import { createRecipe, fetchDailyOfferState, deleteRecipeById } from "../lib/api";
 
 export function RecipesPage() {
-  const { ingredients, recipes, addRecipe, deleteRecipe } = useApp();
+  const { ingredients, recipes, replaceBackendState } = useApp();
+  const mainRecipes = recipes.filter((recipe) => recipe.category === "principal");
   const [recipeName, setRecipeName] = useState("");
-  const [recipeCategory, setRecipeCategory] = useState<"principal" | "accompagnement" | "boisson">("principal");
+  const [recipeCategory] = useState<"principal">("principal");
   const [recipeIngredients, setRecipeIngredients] = useState<RecipeIngredient[]>([]);
 
   const addIngredientToRecipe = () => {
@@ -30,35 +32,40 @@ export function RecipesPage() {
     setRecipeIngredients(updated);
   };
 
-  const handleCreateRecipe = () => {
-    if (!recipeName.trim()) {
-      toast.error("Veuillez saisir un nom de recette");
-      return;
-    }
+  const handleCreateRecipe = async () => {
+  if (!recipeName.trim()) {
+    toast.error("Veuillez saisir un nom de recette");
+    return;
+  }
 
-    const validIngredients = recipeIngredients.filter((ing) => ing.ingredientId && ing.quantity > 0);
+  const validIngredients = recipeIngredients.filter(
+    (ing) => ing.ingredientId && ing.quantity > 0
+  );
 
-    if (validIngredients.length === 0) {
-      toast.error("Veuillez ajouter au moins un ingrédient");
-      return;
-    }
+  if (validIngredients.length === 0) {
+    toast.error("Veuillez ajouter au moins un ingrédient");
+    return;
+  }
 
-    const newRecipe: Recipe = {
-      id: `r${Date.now()}`,
+  try {
+    await createRecipe({
       name: recipeName,
-      category: recipeCategory,
       ingredients: validIngredients,
-      createdAt: new Date(),
-    };
+    });
 
-    addRecipe(newRecipe);
+    const refreshed = await fetchDailyOfferState();
+    replaceBackendState(refreshed.recipes, refreshed.dailyOffer);
+
     toast.success(`Recette "${recipeName}" créée avec succès`);
 
-    // Reset form
+    // reset form
     setRecipeName("");
-    setRecipeCategory("principal");
     setRecipeIngredients([]);
-  };
+  } catch (error) {
+    console.error(error);
+    toast.error("Erreur lors de la création de la recette");
+  }
+};
 
   const getIngredientName = (id: string) => {
     return ingredients.find((ing) => ing.id === id)?.name || "Inconnu";
@@ -105,19 +112,6 @@ export function RecipesPage() {
               onChange={(e) => setRecipeName(e.target.value)}
               className="rounded-xl border-gray-200"
             />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="recipe-category" className="text-sm text-muted-foreground">Catégorie</Label>
-            <Select value={recipeCategory} onValueChange={(value: any) => setRecipeCategory(value)}>
-              <SelectTrigger id="recipe-category" className="rounded-xl border-gray-200">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="principal">Plat principal</SelectItem>
-                <SelectItem value="accompagnement">Accompagnement</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
 
           <div className="space-y-3">
@@ -178,8 +172,8 @@ export function RecipesPage() {
 
       {/* Liste des recettes */}
       <div className="space-y-3">
-        <h2 className="text-xl font-semibold">Mes recettes ({recipes.length})</h2>
-        {recipes.length === 0 ? (
+        <h2 className="text-xl font-semibold">Mes recettes ({mainRecipes.length})</h2>
+        {mainRecipes.length === 0 ? (
           <Card className="rounded-2xl border-0 shadow-sm">
             <CardContent className="py-12 text-center text-muted-foreground">
               Aucune recette créée
@@ -187,7 +181,7 @@ export function RecipesPage() {
           </Card>
         ) : (
           <div className="space-y-3">
-            {recipes.map((recipe) => (
+            {mainRecipes.map((recipe) => (
               <Card key={recipe.id} className="rounded-2xl border-0 shadow-sm">
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between mb-3">
@@ -201,9 +195,18 @@ export function RecipesPage() {
                       size="icon"
                       variant="ghost"
                       className="text-destructive rounded-full"
-                      onClick={() => {
-                        deleteRecipe(recipe.id);
-                        toast.success("Recette supprimée");
+                      onClick={async () => {
+                        try {
+                          await deleteRecipeById(recipe.id);
+
+                          const refreshed = await fetchDailyOfferState();
+                          replaceBackendState(refreshed.recipes, refreshed.dailyOffer);
+
+                          toast.success("Recette supprimée");
+                        } catch (error) {
+                          console.error(error);
+                          toast.error("Erreur lors de la suppression");
+                        }
                       }}
                     >
                       <Trash2 className="size-4" />

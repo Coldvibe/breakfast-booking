@@ -1,18 +1,19 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useApp } from "../context/AppContext";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { Switch } from "../components/ui/switch";
 import { Label } from "../components/ui/label";
 import { Badge } from "../components/ui/badge";
-import { Save, Plus, Minus } from "lucide-react";
+import { Plus, Minus } from "lucide-react";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
-import type { DailyOffer, SelectedItem } from "../types";
-import { toast } from "sonner";
+import type { SelectedItem } from "../types";
 import { getRecipeImage } from "../data/recipeImages";
+import { saveDailyOfferState } from "../lib/api";
 
 export function DailyOfferPage() {
-  const { recipes, dailyOffers, addDailyOffer, updateDailyOffer } = useApp();
+  const { recipes, dailyOffers, replaceBackendState } = useApp();
+
   const tomorrow = useMemo(() => {
     if (dailyOffers.length > 0 && dailyOffers[0].date) {
       return dailyOffers[0].date;
@@ -27,11 +28,29 @@ export function DailyOfferPage() {
   const [selectedAccompaniments, setSelectedAccompaniments] = useState<SelectedItem[]>([]);
   const [isPlanned, setIsPlanned] = useState(true);
   const [isOpen, setIsOpen] = useState(true);
+  const isSyncingFromBackend = useRef(false);
+  const lastSavedPayloadRef = useRef("");
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   const existingOffer = dailyOffers.find((offer) => offer.date === tomorrow);
 
-  // Charger l'offre existante si elle existe
+  const hasConfiguredOffer =
+    !!existingOffer &&
+    (
+      existingOffer.mainDishes.length > 0 ||
+      existingOffer.accompaniments.length > 0
+    );
+  const buildPayload = () => ({
+    isPlanned,
+    isOpen,
+    mainDishes: selectedMainDishes,
+    accompaniments: selectedAccompaniments,
+  });
+
+  const buildPayloadKey = () => JSON.stringify(buildPayload());
   useEffect(() => {
+    isSyncingFromBackend.current = true;
+
     if (existingOffer) {
       setSelectedMainDishes(existingOffer.mainDishes);
       setSelectedAccompaniments(existingOffer.accompaniments);
@@ -43,7 +62,89 @@ export function DailyOfferPage() {
       setIsPlanned(true);
       setIsOpen(true);
     }
+    lastSavedPayloadRef.current = JSON.stringify({
+      isPlanned: existingOffer?.isPlanned ?? true,
+      isOpen: existingOffer?.isOpen ?? true,
+      mainDishes: existingOffer?.mainDishes ?? [],
+      accompaniments: existingOffer?.accompaniments ?? [],
+    });
+    const timeout = setTimeout(() => {
+      isSyncingFromBackend.current = false;
+    }, 0);
+
+    return () => clearTimeout(timeout);
   }, [existingOffer]);
+
+  useEffect(() => {
+    if (saveStatus !== "saved") return;
+
+    const timeout = setTimeout(() => {
+      setSaveStatus("idle");
+    }, 1500);
+
+    return () => clearTimeout(timeout);
+  }, [saveStatus]);
+
+  useEffect(() => {
+    if (isSyncingFromBackend.current) return;
+    if (!existingOffer) return;
+    const payloadKey = buildPayloadKey();
+    if (payloadKey === lastSavedPayloadRef.current) return;
+    const timeout = setTimeout(async () => {
+      try {
+        setSaveStatus("saving");
+
+        const data = await saveDailyOfferState({
+          isPlanned,
+          isOpen,
+          mainDishes: selectedMainDishes,
+          accompaniments: selectedAccompaniments,
+        });
+
+        replaceBackendState(data.recipes, data.dailyOffer);
+        lastSavedPayloadRef.current = payloadKey;
+        setSaveStatus("saved");
+
+        console.log("Autosave toggle OK");
+      } catch (error) {
+        console.error("Autosave error", error);
+        setSaveStatus("error");
+      }
+    }, 400);
+
+    return () => clearTimeout(timeout);
+  }, [isPlanned, isOpen]);
+
+  useEffect(() => {
+    if (isSyncingFromBackend.current) return;
+    if (!existingOffer) return;
+    const payloadKey = buildPayloadKey();
+    if (payloadKey === lastSavedPayloadRef.current) return;
+
+    const timeout = setTimeout(async () => {
+      try {
+        setSaveStatus("saving");
+
+        const data = await saveDailyOfferState({
+          isPlanned,
+          isOpen,
+          mainDishes: selectedMainDishes,
+          accompaniments: selectedAccompaniments,
+        });
+
+        replaceBackendState(data.recipes, data.dailyOffer);
+        lastSavedPayloadRef.current = payloadKey;
+        setSaveStatus("saved");
+
+        console.log("Autosave selection OK");
+      } catch (error) {
+        console.error("Autosave selection error", error);
+        setSaveStatus("error");
+      }
+    }, 500);
+
+    return () => clearTimeout(timeout);
+  }, [selectedMainDishes, selectedAccompaniments]);
 
   const mainDishRecipes = recipes.filter((r) => r.category === "principal");
   const accompanimentRecipes = recipes.filter((r) => r.category === "accompagnement");
@@ -76,62 +177,6 @@ export function DailyOfferPage() {
         item.recipeId === recipeId ? { ...item, maxPerPerson } : item
       )
     );
-  };
-
-  const handleSaveOffer = () => {
-    if (!isPlanned) {
-      // Si pas prévu, on peut sauvegarder même sans plats
-      if (existingOffer) {
-        updateDailyOffer(existingOffer.id, {
-          mainDishes: [],
-          accompaniments: [],
-          isPlanned: false,
-          isOpen: false,
-        });
-        toast.success("Offre mise à jour - Déjeuner non prévu");
-      } else {
-        const newOffer: DailyOffer = {
-          id: `offer${Date.now()}`,
-          date: tomorrow,
-          mainDishes: [],
-          accompaniments: [],
-          isPlanned: false,
-          isOpen: false,
-          createdAt: new Date(),
-        };
-        addDailyOffer(newOffer);
-        toast.success("Offre créée - Déjeuner non prévu");
-      }
-      return;
-    }
-
-    // Vérifier qu'au moins un plat principal est sélectionné
-    if (selectedMainDishes.length === 0) {
-      toast.error("Veuillez sélectionner au moins un plat principal");
-      return;
-    }
-
-    if (existingOffer) {
-      updateDailyOffer(existingOffer.id, {
-        mainDishes: selectedMainDishes,
-        accompaniments: selectedAccompaniments,
-        isPlanned,
-        isOpen,
-      });
-      toast.success("Offre mise à jour");
-    } else {
-      const newOffer: DailyOffer = {
-        id: `offer${Date.now()}`,
-        date: tomorrow,
-        mainDishes: selectedMainDishes,
-        accompaniments: selectedAccompaniments,
-        isPlanned,
-        isOpen,
-        createdAt: new Date(),
-      };
-      addDailyOffer(newOffer);
-      toast.success("Offre créée");
-    }
   };
 
   const formatDateHeader = (dateStr: string) => {
@@ -172,7 +217,7 @@ export function DailyOfferPage() {
           </div>
         </div>
 
-        {/* Statut réservations (seulement si prévu) */}
+        {/* Statut réservations */}
         {isPlanned && (
           <div className="flex items-center justify-between pt-4">
             <div>
@@ -190,6 +235,36 @@ export function DailyOfferPage() {
           </div>
         )}
       </div>
+
+      {/* Indicateur d'autosave */}
+      {(saveStatus === "saving" || saveStatus === "saved" || saveStatus === "error") && (
+        <div className="fixed top-[140px] left-1/2 -translate-x-1/2 z-50">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground bg-card border border-border shadow-md px-3 py-1 rounded-full">
+            
+            {saveStatus === "saving" && (
+              <>
+                <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                <span>Sauvegarde...</span>
+              </>
+            )}
+
+            {saveStatus === "saved" && (
+              <>
+                <div className="w-2 h-2 rounded-full bg-green-500" />
+                <span>Enregistré</span>
+              </>
+            )}
+
+            {saveStatus === "error" && (
+              <>
+                <div className="w-2 h-2 rounded-full bg-red-500" />
+                <span>Erreur</span>
+              </>
+            )}
+
+          </div>
+        </div>
+      )}
 
       {/* Contenu seulement si déjeuner prévu */}
       {isPlanned && (
@@ -372,21 +447,15 @@ export function DailyOfferPage() {
         </>
       )}
 
-      {/* Bouton de sauvegarde */}
-      <Button className="w-full rounded-full h-14" size="lg" onClick={handleSaveOffer}>
-        <Save className="size-5 mr-2" />
-        {existingOffer ? "Mettre à jour l'offre" : "Créer l'offre"}
-      </Button>
-
-      {/* Récapitulatif de l'offre validée */}
-      {existingOffer && existingOffer.isPlanned && (
-        <Card className="rounded-2xl border-0 shadow-sm bg-gradient-to-br from-green-50 to-green-100 border-l-4 border-l-green-500">
+      {/* Récapitulatif de l'offre */}
+      {hasConfiguredOffer && existingOffer?.isPlanned && (
+        <Card className="rounded-2xl border border-border/50 shadow-sm bg-card">
           <CardContent className="p-6">
             <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
-              <Badge className="rounded-full bg-green-600">Validé</Badge>
+              <Badge variant="secondary" className="rounded-full">Offre du jour</Badge>
               Offre du {formatDateHeader(tomorrow)}
             </h3>
-            
+
             {existingOffer.mainDishes.length > 0 && (
               <div className="mb-4">
                 <h4 className="text-sm font-medium text-muted-foreground mb-2">

@@ -6,13 +6,14 @@ from datetime import date, timedelta
 import urllib.parse
 from typing import Optional
 
-from fastapi import APIRouter, Form, Request,  HTTPException
+from fastapi import APIRouter, Form, Request,  HTTPException, Request, Body
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 # + importe get_recipe, update_recipe
 
 from app.auth import admin_credentials_ok, is_admin_logged_in, require_admin
 from app.db import (
+    get_conn,
     # events
     ensure_event_for_date,
     get_event,
@@ -20,6 +21,7 @@ from app.db import (
     toggle_event_planned,
     get_tomorrow_admin_snapshot,
     update_event_flags,
+    set_event_planned,
     # agents
     list_agents,
     add_agent,
@@ -992,8 +994,6 @@ def admin_app(request: Request):
 
 @router.get("/api/admin/daily-offer-state")
 def api_admin_daily_offer_state(request: Request):
-    
-
     event_date = _tomorrow_str()
     ensure_event_for_date(event_date, _menu_for_tomorrow(request))
 
@@ -1026,6 +1026,9 @@ def api_admin_daily_offer_state(request: Request):
     accompaniments = []
 
     for offer in offers:
+        if not offer["is_active"]:
+            continue
+
         if offer["offer_type"] == "MAIN" and offer["recipe_id"]:
             main_dishes.append({
                 "recipeId": f"r-{offer['recipe_id']}",
@@ -1048,7 +1051,259 @@ def api_admin_daily_offer_state(request: Request):
         "createdAt": None,
     }
 
+    frontend_ingredients = []
+
+    with get_conn() as conn:
+        try:
+            conn.execute("ALTER TABLE foods ADD COLUMN stock REAL NOT NULL DEFAULT 0")
+        except Exception:
+            pass
+
+        rows = conn.execute(
+            "SELECT id, name, unit, stock FROM foods WHERE is_active = 1 ORDER BY name"
+        ).fetchall()
+
+    for food in rows:
+        frontend_ingredients.append({
+            "id": f"f-{food['id']}",
+            "name": food["name"],
+            "unit": food["unit"],
+            "stock": float(food["stock"] or 0),
+        })
+
     return JSONResponse({
+        "ingredients": frontend_ingredients,
         "recipes": frontend_recipes,
         "dailyOffer": daily_offer,
-    })    
+    })
+@router.post("/api/admin/daily-offer-state")
+def api_admin_save_daily_offer_state(request: Request, payload: dict = Body(...)):
+    event_date = _tomorrow_str()
+    ensure_event_for_date(event_date, _menu_for_tomorrow(request))
+
+    event = get_event(event_date)
+    if not event:
+        return JSONResponse({"error": "event_not_found"}, status_code=404)
+
+    is_planned = bool(payload.get("isPlanned", True))
+    is_open = bool(payload.get("isOpen", True))
+    main_dishes = payload.get("mainDishes", [])
+    accompaniments = payload.get("accompaniments", [])
+
+    # 1) Mettre à jour l'event
+    set_event_planned(event["id"], is_planned)
+
+    # Si pas prévu, on ferme aussi les réservations
+    if not is_planned:
+        if event["open"]:
+            toggle_event_open(event["id"])
+    else:
+        # on synchronise l'état open avec la valeur voulue
+        current_open = bool(get_event(event_date)["open"])
+        if current_open != is_open:
+            toggle_event_open(event["id"])
+
+    # 2) Remplacer toutes les offres du jour
+    existing_offers = list_offers_for_date(event_date)
+    for offer in existing_offers:
+        set_offer_active(offer["id"], False)
+
+    # 3) Réactiver / recréer les MAIN
+    if is_planned:
+        for item in main_dishes:
+            recipe_id_raw = item.get("recipeId", "")
+            max_per_person = int(item.get("maxPerPerson", 1))
+
+            if recipe_id_raw.startswith("r-"):
+                recipe_id = int(recipe_id_raw.replace("r-", ""))
+                add_offer_main(event_date, recipe_id, max_per_person)
+
+        # 4) Réactiver / recréer les SIDE
+        for item in accompaniments:
+            food_id_raw = item.get("recipeId", "")
+            max_per_person = int(item.get("maxPerPerson", 1))
+
+            if food_id_raw.startswith("f-"):
+                food_id = int(food_id_raw.replace("f-", ""))
+                add_offer_side(event_date, food_id, max_per_person)
+
+    # 5) Retourner l'état relu depuis le backend
+    offers = list_offers_for_date(event_date)
+    recipes = list_recipes(active_only=True)
+    foods = list_foods(active_only=True)
+    refreshed_event = get_event(event_date)
+
+    frontend_recipes = []
+
+    for recipe in recipes:
+        frontend_recipes.append({
+            "id": f"r-{recipe['id']}",
+            "name": recipe["name"],
+            "category": "principal",
+            "ingredients": [],
+            "createdAt": None,
+        })
+
+    for food in foods:
+        frontend_recipes.append({
+            "id": f"f-{food['id']}",
+            "name": food["name"],
+            "category": "accompagnement",
+            "ingredients": [],
+            "createdAt": None,
+        })
+
+    refreshed_main = []
+    refreshed_acc = []
+
+    for offer in offers:
+        if not offer["is_active"]:
+            continue
+
+        if offer["offer_type"] == "MAIN" and offer["recipe_id"]:
+            refreshed_main.append({
+                "recipeId": f"r-{offer['recipe_id']}",
+                "maxPerPerson": int(offer["max_per_person"]),
+            })
+
+        if offer["offer_type"] == "SIDE" and offer["food_id"]:
+            refreshed_acc.append({
+                "recipeId": f"f-{offer['food_id']}",
+                "maxPerPerson": int(offer["max_per_person"]),
+            })
+
+    daily_offer = {
+        "id": f"offer-{refreshed_event['id']}",
+        "date": event_date,
+        "mainDishes": refreshed_main,
+        "accompaniments": refreshed_acc,
+        "isPlanned": bool(refreshed_event.get("is_planned", True)),
+        "isOpen": bool(refreshed_event["open"]),
+        "createdAt": None,
+    }
+
+    return JSONResponse({
+        "success": True,
+        "recipes": frontend_recipes,
+        "dailyOffer": daily_offer,
+    })
+@router.post("/api/admin/recipes")
+def api_admin_create_recipe(request: Request, payload: dict = Body(...)):
+    name = (payload.get("name") or "").strip()
+    ingredients = payload.get("ingredients", [])
+
+    if not name:
+        return JSONResponse({"error": "missing_name"}, status_code=400)
+
+    if not ingredients:
+        return JSONResponse({"error": "missing_ingredients"}, status_code=400)
+
+    # 1. créer la recette
+    add_recipe(name)
+
+    # 2. relire la recette créée pour récupérer son id
+    recipes = list_recipes(active_only=False)
+    created_recipe = next((r for r in recipes if r["name"] == name), None)
+
+    if not created_recipe:
+        return JSONResponse({"error": "recipe_not_created"}, status_code=500)
+
+    recipe_id = created_recipe["id"]
+
+    # 3. enregistrer les ingrédients de la recette
+    with get_conn() as conn:
+        conn.execute("DELETE FROM recipe_ingredients WHERE recipe_id = ?", (recipe_id,))
+
+        for item in ingredients:
+            ingredient_id_raw = item.get("ingredientId", "")
+            quantity = float(item.get("quantity", 0))
+
+            if not ingredient_id_raw or quantity <= 0:
+                continue
+
+            if ingredient_id_raw.startswith("f-"):
+                food_id = int(ingredient_id_raw.replace("f-", ""))
+            else:
+                food_id = int(ingredient_id_raw)
+
+            conn.execute(
+                """
+                INSERT INTO recipe_ingredients (recipe_id, food_id, qty, unit)
+                VALUES (?, ?, ?, 'unit')
+                """,
+                (recipe_id, food_id, quantity),
+            )
+
+    return JSONResponse({
+        "success": True,
+        "recipe": {
+            "id": f"r-{recipe_id}",
+            "name": name,
+            "category": "principal",
+            "ingredients": ingredients,
+            "createdAt": None,
+        },
+    })
+
+@router.delete("/api/admin/recipes/{recipe_id}")
+def api_admin_delete_recipe(request: Request, recipe_id: int):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM recipe_ingredients WHERE recipe_id = ?", (recipe_id,))
+        conn.execute("DELETE FROM recipes WHERE id = ?", (recipe_id,))
+
+    return JSONResponse({"success": True})
+
+@router.post("/api/admin/foods")
+def api_admin_create_food(request: Request, payload: dict = Body(...)):
+    name = (payload.get("name") or "").strip()
+    unit = (payload.get("unit") or "unit").strip()
+
+    if not name:
+        return JSONResponse({"error": "missing_name"}, status_code=400)
+
+    add_food(name, unit)
+
+    foods = list_foods(active_only=True)
+    created_food = next((f for f in foods if f["name"] == name), None)
+
+    if not created_food:
+        return JSONResponse({"error": "food_not_created"}, status_code=500)
+
+    return JSONResponse({
+        "success": True,
+        "ingredient": {
+            "id": f"f-{created_food['id']}",
+            "name": created_food["name"],
+            "unit": created_food["unit"],
+            "stock": 0,
+        },
+    })
+
+@router.patch("/api/admin/foods/{food_id}")
+def api_admin_update_food(request: Request, food_id: int, payload: dict = Body(...)):
+    stock = payload.get("stock", None)
+
+    if stock is None:
+        return JSONResponse({"error": "missing_stock"}, status_code=400)
+
+    try:
+        stock_value = float(stock)
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "invalid_stock"}, status_code=400)
+
+    if stock_value < 0:
+        return JSONResponse({"error": "negative_stock"}, status_code=400)
+
+    with get_conn() as conn:
+        # On ajoute une colonne stock si elle n'existe pas encore
+        try:
+            conn.execute("ALTER TABLE foods ADD COLUMN stock REAL NOT NULL DEFAULT 0")
+        except Exception:
+            pass
+
+        conn.execute(
+            "UPDATE foods SET stock = ? WHERE id = ?",
+            (stock_value, food_id),
+        )
+
+    return JSONResponse({"success": True})

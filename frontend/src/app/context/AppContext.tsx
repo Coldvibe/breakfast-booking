@@ -15,6 +15,11 @@ interface AppContextType {
   addDailyOffer: (offer: DailyOffer) => void;
   updateDailyOffer: (id: string, offer: Partial<DailyOffer>) => void;
   deleteDailyOffer: (id: string) => void;
+  replaceBackendState: (
+    recipes: Recipe[],
+    dailyOffer: DailyOffer | null,
+    ingredients?: Ingredient[]
+  ) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -100,13 +105,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
         console.log("Backend data:", data);
 
-        setRecipes(data.recipes || []);
+      setIngredients(data.ingredients || []);
+      setRecipes(data.recipes || []);
 
-        if (data.dailyOffer) {
-          setDailyOffers([data.dailyOffer]);
-        } else {
-          setDailyOffers([]);
-        }
+      if (data.dailyOffer) {
+        setDailyOffers([data.dailyOffer]);
+      } else {
+        setDailyOffers([]);
+      }
       } catch (error) {
         console.error("Erreur chargement backend:", error);
 
@@ -153,6 +159,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const deleteDailyOffer = (id: string) => {
     setDailyOffers(dailyOffers.filter((offer) => offer.id !== id));
   };
+  const replaceBackendState = (
+    recipesFromBackend: Recipe[],
+    dailyOfferFromBackend: DailyOffer | null,
+    ingredientsFromBackend?: Ingredient[]
+  ) => {
+    if (ingredientsFromBackend) {
+      setIngredients(ingredientsFromBackend);
+    }
+
+    setRecipes(recipesFromBackend || []);
+
+    if (dailyOfferFromBackend) {
+      setDailyOffers([dailyOfferFromBackend]);
+    } else {
+      setDailyOffers([]);
+    }
+  };
 
   return (
     <AppContext.Provider
@@ -168,6 +191,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addDailyOffer,
         updateDailyOffer,
         deleteDailyOffer,
+        replaceBackendState
       }}
     >
       {children}
