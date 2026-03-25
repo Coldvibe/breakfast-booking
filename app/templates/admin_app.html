@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zack & Snack</title>
+  <link rel="stylesheet" href="/static/css/admin-app.css">
+</head>
+<body class="figma-app">
+  <div class="figma-shell">
+
+    <header class="figma-header">
+      <div class="figma-header__row">
+        <button class="figma-icon-btn" type="button">☰</button>
+        <div class="figma-icon-avatar">👤</div>
+      </div>
+
+      <div class="figma-header__intro">
+        <p>Bonjour,</p>
+        <h1>Gestionnaire</h1>
+      </div>
+    </header>
+
+    <main class="figma-main">
+      <section class="figma-date-card">
+        <div class="figma-date-card__top">
+          <button class="figma-ghost-btn" type="button">‹</button>
+          <h2>{{ event["date"] }}</h2>
+          <button class="figma-ghost-btn" type="button">›</button>
+        </div>
+
+        <div class="figma-date-card__bottom">
+          <div>
+            <div class="figma-label">Réservations</div>
+            <div class="figma-subtext">
+              {% if event["open"] %}
+                Les réservations sont ouvertes
+              {% else %}
+                Les réservations sont fermées
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="figma-toggle-wrap">
+            <span class="figma-badge {% if event['open'] %}is-open{% else %}is-closed{% endif %}">
+              {% if event["open"] %}Ouvert{% else %}Fermé{% endif %}
+            </span>
+            <div class="figma-switch {% if event['open'] %}is-on{% endif %}">
+              <div class="figma-switch__thumb"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="figma-section">
+        <h3>Plats principaux</h3>
+      </section>
+
+      <section class="figma-section">
+        <h3>Accompagnements</h3>
+      </section>
+    </main>
+
+    <nav class="figma-bottom-nav">
+      <div class="figma-bottom-nav__item is-active">
+        <div>📅</div>
+        <span>Offre</span>
+      </div>
+      <div class="figma-bottom-nav__item">
+        <div>👨‍🍳</div>
+        <span>Recettes</span>
+      </div>
+      <div class="figma-bottom-nav__item">
+        <div>📦</div>
+        <span>Stocks</span>
+      </div>
+    </nav>
+
+  </div>
+</body>
+</html>

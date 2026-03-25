@@ -7,7 +7,7 @@ import urllib.parse
 from typing import Optional
 
 from fastapi import APIRouter, Form, Request,  HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 # + importe get_recipe, update_recipe
 
@@ -952,3 +952,103 @@ def admin_tomorrow_bottom(request: Request):
             "snapshot": snapshot,
         },
     )
+
+@router.get("/admin/app", response_class=HTMLResponse)
+def admin_app(request: Request):
+    guard = require_admin(request)
+    if guard:
+        return guard
+
+    event_date = _tomorrow_str()
+    ensure_event_for_date(event_date, _menu_for_tomorrow(request))
+
+    event = get_event(event_date)
+    snapshot = get_tomorrow_admin_snapshot(event_date)
+
+    offers = list_offers_for_date(event_date)
+    mains = [o for o in offers if o["offer_type"] == "MAIN"]
+    sides = [o for o in offers if o["offer_type"] == "SIDE"]
+
+    agents = list_agents(active_only=True)
+    working_ids = list_working_agent_ids(event_date)
+
+    recipes = list_recipes(active_only=True)
+    foods = list_foods(active_only=True)
+
+    return _templates(request).TemplateResponse(
+        "admin_app.html",
+        {
+            "request": request,
+            "event": event,
+            "snapshot": snapshot,
+            "mains": mains,
+            "sides": sides,
+            "agents": agents,
+            "working_ids": working_ids,
+            "recipes": recipes,
+            "foods": foods,
+        },
+    )    
+
+@router.get("/api/admin/daily-offer-state")
+def api_admin_daily_offer_state(request: Request):
+    
+
+    event_date = _tomorrow_str()
+    ensure_event_for_date(event_date, _menu_for_tomorrow(request))
+
+    event = get_event(event_date)
+    offers = list_offers_for_date(event_date)
+    recipes = list_recipes(active_only=True)
+    foods = list_foods(active_only=True)
+
+    frontend_recipes = []
+
+    for recipe in recipes:
+        frontend_recipes.append({
+            "id": f"r-{recipe['id']}",
+            "name": recipe["name"],
+            "category": "principal",
+            "ingredients": [],
+            "createdAt": None,
+        })
+
+    for food in foods:
+        frontend_recipes.append({
+            "id": f"f-{food['id']}",
+            "name": food["name"],
+            "category": "accompagnement",
+            "ingredients": [],
+            "createdAt": None,
+        })
+
+    main_dishes = []
+    accompaniments = []
+
+    for offer in offers:
+        if offer["offer_type"] == "MAIN" and offer["recipe_id"]:
+            main_dishes.append({
+                "recipeId": f"r-{offer['recipe_id']}",
+                "maxPerPerson": int(offer["max_per_person"]),
+            })
+
+        if offer["offer_type"] == "SIDE" and offer["food_id"]:
+            accompaniments.append({
+                "recipeId": f"f-{offer['food_id']}",
+                "maxPerPerson": int(offer["max_per_person"]),
+            })
+
+    daily_offer = {
+        "id": f"offer-{event['id']}",
+        "date": event_date,
+        "mainDishes": main_dishes,
+        "accompaniments": accompaniments,
+        "isPlanned": bool(event.get("is_planned", True)),
+        "isOpen": bool(event["open"]),
+        "createdAt": None,
+    }
+
+    return JSONResponse({
+        "recipes": frontend_recipes,
+        "dailyOffer": daily_offer,
+    })    
