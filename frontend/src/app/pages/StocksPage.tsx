@@ -30,6 +30,7 @@ export function StocksPage() {
       await createFood({
         name: newIngName,
         unit: newIngUnit,
+        stock: parseFloat(newIngStock) || 0,
       });
 
       const refreshed = await fetchDailyOfferState();
@@ -43,7 +44,12 @@ export function StocksPage() {
       setNewIngStock("0");
     } catch (error) {
       console.error(error);
-      toast.error("Erreur lors de l'ajout de l'ingrédient");
+
+      if (error instanceof Error && error.message === "duplicate_food") {
+        toast.error("Cet ingrédient existe déjà");
+      } else {
+        toast.error("Erreur lors de l'ajout de l'ingrédient");
+      }
     }
   };
 

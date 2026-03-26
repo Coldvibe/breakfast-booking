@@ -1135,14 +1135,32 @@ def api_admin_save_daily_offer_state(request: Request, payload: dict = Body(...)
 
     frontend_recipes = []
 
-    for recipe in recipes:
-        frontend_recipes.append({
-            "id": f"r-{recipe['id']}",
-            "name": recipe["name"],
-            "category": "principal",
-            "ingredients": [],
-            "createdAt": None,
-        })
+    with get_conn() as conn:
+        for recipe in recipes:
+            ingredient_rows = conn.execute(
+                """
+                SELECT food_id, qty
+                FROM recipe_ingredients
+                WHERE recipe_id = ?
+                ORDER BY id
+                """,
+                (recipe["id"],),
+            ).fetchall()
+
+            recipe_ingredients = []
+            for row in ingredient_rows:
+                recipe_ingredients.append({
+                    "ingredientId": f"f-{row['food_id']}",
+                    "quantity": float(row["qty"] or 0),
+                })
+
+            frontend_recipes.append({
+                "id": f"r-{recipe['id']}",
+                "name": recipe["name"],
+                "category": "principal",
+                "ingredients": recipe_ingredients,
+                "createdAt": None,
+            })
 
     for food in foods:
         frontend_recipes.append({
@@ -1247,6 +1265,16 @@ def api_admin_create_recipe(request: Request, payload: dict = Body(...)):
 
 @router.delete("/api/admin/recipes/{recipe_id}")
 def api_admin_delete_recipe(request: Request, recipe_id: int):
+    event_date = _tomorrow_str()
+    offers = list_offers_for_date(event_date)
+
+    for offer in offers:
+        if offer["is_active"] and offer["offer_type"] == "MAIN" and offer["recipe_id"] == recipe_id:
+            return JSONResponse(
+                {"error": "recipe_used_in_offer"},
+                status_code=409,
+            )
+
     with get_conn() as conn:
         conn.execute("DELETE FROM recipe_ingredients WHERE recipe_id = ?", (recipe_id,))
         conn.execute("DELETE FROM recipes WHERE id = ?", (recipe_id,))
@@ -1257,14 +1285,42 @@ def api_admin_delete_recipe(request: Request, recipe_id: int):
 def api_admin_create_food(request: Request, payload: dict = Body(...)):
     name = (payload.get("name") or "").strip()
     unit = (payload.get("unit") or "unit").strip()
+    stock = payload.get("stock", 0)
 
     if not name:
         return JSONResponse({"error": "missing_name"}, status_code=400)
+    with get_conn() as conn:
+        existing = conn.execute(
+            "SELECT id FROM foods WHERE LOWER(name) = LOWER(?) LIMIT 1",
+            (name,),
+        ).fetchone()
 
-    add_food(name, unit)
+    if existing:
+        return JSONResponse({"error": "duplicate_food"}, status_code=409)    
 
-    foods = list_foods(active_only=True)
-    created_food = next((f for f in foods if f["name"] == name), None)
+    try:
+        stock_value = float(stock)
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "invalid_stock"}, status_code=400)
+
+    if stock_value < 0:
+        return JSONResponse({"error": "negative_stock"}, status_code=400)
+
+    with get_conn() as conn:
+        try:
+            conn.execute("ALTER TABLE foods ADD COLUMN stock REAL NOT NULL DEFAULT 0")
+        except Exception:
+            pass
+
+        conn.execute(
+            "INSERT INTO foods (name, unit, is_active, stock) VALUES (?, ?, 1, ?)",
+            (name, unit, stock_value),
+        )
+
+        created_food = conn.execute(
+            "SELECT id, name, unit, stock FROM foods WHERE name = ? ORDER BY id DESC LIMIT 1",
+            (name,),
+        ).fetchone()
 
     if not created_food:
         return JSONResponse({"error": "food_not_created"}, status_code=500)
@@ -1275,7 +1331,7 @@ def api_admin_create_food(request: Request, payload: dict = Body(...)):
             "id": f"f-{created_food['id']}",
             "name": created_food["name"],
             "unit": created_food["unit"],
-            "stock": 0,
+            "stock": float(created_food["stock"] or 0),
         },
     })
 
@@ -1307,3 +1363,114 @@ def api_admin_update_food(request: Request, food_id: int, payload: dict = Body(.
         )
 
     return JSONResponse({"success": True})
+
+@router.patch("/api/admin/recipes/{recipe_id}")
+def api_admin_update_recipe(request: Request, recipe_id: int, payload: dict = Body(...)):
+    name = (payload.get("name") or "").strip()
+    ingredients = payload.get("ingredients", [])
+
+    if not name:
+        return JSONResponse({"error": "missing_name"}, status_code=400)
+
+    if not ingredients:
+        return JSONResponse({"error": "missing_ingredients"}, status_code=400)
+
+    with get_conn() as conn:
+        # vérifier que la recette existe
+        existing = conn.execute(
+            "SELECT id FROM recipes WHERE id = ?",
+            (recipe_id,),
+        ).fetchone()
+
+        if not existing:
+            return JSONResponse({"error": "recipe_not_found"}, status_code=404)
+
+        # mettre à jour le nom
+        conn.execute(
+            "UPDATE recipes SET name = ? WHERE id = ?",
+            (name, recipe_id),
+        )
+
+        # remplacer les ingrédients
+        conn.execute(
+            "DELETE FROM recipe_ingredients WHERE recipe_id = ?",
+            (recipe_id,),
+        )
+
+        for item in ingredients:
+            ingredient_id_raw = item.get("ingredientId", "")
+            quantity = float(item.get("quantity", 0))
+
+            if not ingredient_id_raw or quantity <= 0:
+                continue
+
+            if ingredient_id_raw.startswith("f-"):
+                food_id = int(ingredient_id_raw.replace("f-", ""))
+            else:
+                food_id = int(ingredient_id_raw)
+
+            conn.execute(
+                """
+                INSERT INTO recipe_ingredients (recipe_id, food_id, qty, unit)
+                VALUES (?, ?, ?, 'unit')
+                """,
+                (recipe_id, food_id, quantity),
+            )
+
+    return JSONResponse({"success": True})
+
+@router.get("/api/admin/recipes-state")
+def api_admin_recipes_state(request: Request):
+    recipes = list_recipes(active_only=True)
+
+    frontend_ingredients = []
+    frontend_recipes = []
+
+    with get_conn() as conn:
+        try:
+            conn.execute("ALTER TABLE foods ADD COLUMN stock REAL NOT NULL DEFAULT 0")
+        except Exception:
+            pass
+
+        food_rows = conn.execute(
+            "SELECT id, name, unit, stock FROM foods WHERE is_active = 1 ORDER BY name"
+        ).fetchall()
+
+        for food in food_rows:
+            frontend_ingredients.append({
+                "id": f"f-{food['id']}",
+                "name": food["name"],
+                "unit": food["unit"],
+                "stock": float(food["stock"] or 0),
+            })
+
+        for recipe in recipes:
+            ingredient_rows = conn.execute(
+                """
+                SELECT food_id, qty
+                FROM recipe_ingredients
+                WHERE recipe_id = ?
+                ORDER BY id
+                """,
+                (recipe["id"],),
+            ).fetchall()
+
+            recipe_ingredients = []
+            for row in ingredient_rows:
+                recipe_ingredients.append({
+                    "ingredientId": f"f-{row['food_id']}",
+                    "quantity": float(row["qty"] or 0),
+                })
+
+            frontend_recipes.append({
+                "id": f"r-{recipe['id']}",
+                "name": recipe["name"],
+                "category": "principal",
+                "ingredients": recipe_ingredients,
+                "createdAt": None,
+            })
+
+    return JSONResponse({
+        "ingredients": frontend_ingredients,
+        "recipes": frontend_recipes,
+    })

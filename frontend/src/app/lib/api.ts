@@ -53,7 +53,16 @@ export async function deleteRecipeById(recipeId: string) {
   });
 
   if (!response.ok) {
-    throw new Error("Erreur API deleteRecipe");
+    let errorCode = "unknown_error";
+
+    try {
+      const data = await response.json();
+      errorCode = data.error || errorCode;
+    } catch {
+      // ignore
+    }
+
+    throw new Error(errorCode);
   }
 
   return response.json();
@@ -61,6 +70,7 @@ export async function deleteRecipeById(recipeId: string) {
 export async function createFood(payload: {
   name: string;
   unit: string;
+  stock: number;
 }) {
   const response = await fetch("/api/admin/foods", {
     method: "POST",
@@ -71,7 +81,16 @@ export async function createFood(payload: {
   });
 
   if (!response.ok) {
-    throw new Error("Erreur API createFood");
+    let errorCode = "unknown_error";
+
+    try {
+      const data = await response.json();
+      errorCode = data.error || errorCode;
+    } catch {
+      // ignore
+    }
+
+    throw new Error(errorCode);
   }
 
   return response.json();
@@ -92,6 +111,50 @@ export async function updateFoodStock(foodId: string, stock: number) {
 
   if (!response.ok) {
     throw new Error("Erreur API updateFoodStock");
+  }
+
+  return response.json();
+}
+
+export async function updateRecipe(payload: {
+  id: string;
+  name: string;
+  ingredients: { ingredientId: string; quantity: number }[];
+}) {
+  const backendId = payload.id.startsWith("r-")
+    ? payload.id.replace("r-", "")
+    : payload.id;
+
+  const response = await fetch(`/api/admin/recipes/${backendId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name: payload.name,
+      ingredients: payload.ingredients,
+    }),
+  });
+
+  if (!response.ok) {
+    let errorCode = "unknown_error";
+
+    try {
+      const data = await response.json();
+      errorCode = data.error || errorCode;
+    } catch {}
+
+    throw new Error(errorCode);
+  }
+
+  return response.json();
+}
+
+export async function fetchRecipesState() {
+  const response = await fetch("/api/admin/recipes-state");
+
+  if (!response.ok) {
+    throw new Error("Erreur API fetchRecipesState");
   }
 
   return response.json();
