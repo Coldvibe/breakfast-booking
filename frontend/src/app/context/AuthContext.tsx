@@ -1,82 +1,60 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { fetchMe } from "../lib/api";
 
 interface User {
   id: string;
   name: string;
   email: string;
-  role: "admin" | "employee";
+  role: "admin" | "gestionnaire" | "utilisateur";
 }
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => boolean;
+  setUser: (user: User | null) => void;
   logout: () => void;
   isAdmin: boolean;
+  isAuthLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Utilisateurs de démonstration
-const DEMO_USERS = [
-  {
-    id: "1",
-    name: "Marie Dupont",
-    email: "admin@example.com",
-    password: "admin",
-    role: "admin" as const,
-  },
-  {
-    id: "2",
-    name: "Jean Martin",
-    email: "jean@example.com",
-    password: "1234",
-    role: "employee" as const,
-  },
-  {
-    id: "3",
-    name: "Sophie Bernard",
-    email: "sophie@example.com",
-    password: "1234",
-    role: "employee" as const,
-  },
-];
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>({
-    id: "1",
-    name: "Marie Dupont",
-    email: "admin@example.com",
-    role: "admin",
-  });
-
-  const login = (email: string, password: string): boolean => {
-    const foundUser = DEMO_USERS.find(
-      (u) => u.email === email && u.password === password
-    );
-
-    if (foundUser) {
-      setUser({
-        id: foundUser.id,
-        name: foundUser.name,
-        email: foundUser.email,
-        role: foundUser.role,
-      });
-      return true;
-    }
-    return false;
-  };
+  const [user, setUser] = useState<User | null>(null);
 
   const logout = () => {
     setUser(null);
+
+    // Optionnel : clear session côté backend plus tard
+    fetch("/api/auth/logout", {
+      method: "POST",
+      credentials: "include",
+    }).catch(() => {});
   };
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+
+    useEffect(() => {
+      const restoreSession = async () => {
+        try {
+          const data = await fetchMe();
+          setUser(data.user);
+        } catch {
+          setUser(null);
+        } finally {
+          setIsAuthLoading(false);
+        }
+      };
+
+      restoreSession();
+    }, []);
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        login,
+        setUser,
         logout,
-        isAdmin: user?.role === "admin",
+        isAdmin: user?.role === "admin" || user?.role === "gestionnaire",
+        isAuthLoading,
       }}
     >
       {children}
@@ -86,7 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;

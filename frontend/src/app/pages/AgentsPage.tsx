@@ -1,104 +1,103 @@
-import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Badge } from "../components/ui/badge";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
-import { Plus, Mail, Phone, UserCheck, UserX } from "lucide-react";
+import { Plus, Phone, UserCheck, UserX } from "lucide-react";
 import { toast } from "sonner";
+import { useEffect, useState } from "react";
+import { createAgent, fetchAgentsState, updateAgentActive } from "../lib/api";
 
 interface Agent {
   id: string;
   name: string;
-  email: string;
   phone: string;
-  role: "admin" | "gestionnaire" | "utilisateur";
+  whatsappOptin: boolean;
   isActive: boolean;
 }
 
-const INITIAL_AGENTS: Agent[] = [
-  {
-    id: "1",
-    name: "Marie Dupont",
-    email: "marie.dupont@example.com",
-    phone: "06 12 34 56 78",
-    role: "admin",
-    isActive: true,
-  },
-  {
-    id: "2",
-    name: "Jean Martin",
-    email: "jean.martin@example.com",
-    phone: "06 98 76 54 32",
-    role: "gestionnaire",
-    isActive: true,
-  },
-  {
-    id: "3",
-    name: "Sophie Bernard",
-    email: "sophie.bernard@example.com",
-    phone: "06 45 67 89 01",
-    role: "utilisateur",
-    isActive: false,
-  },
-];
+
 
 export function AgentsPage() {
-  const [agents, setAgents] = useState<Agent[]>(INITIAL_AGENTS);
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [newName, setNewName] = useState("");
-  const [newEmail, setNewEmail] = useState("");
   const [newPhone, setNewPhone] = useState("");
+  useEffect(() => {
+    const loadAgents = async () => {
+      try {
+        const data = await fetchAgentsState();
+        setAgents(data.agents || []);
+      } catch (error) {
+        console.error(error);
+        toast.error("Erreur lors du chargement des agents");
+      }
+    };
 
-  const handleAddAgent = () => {
-    if (!newName.trim() || !newEmail.trim()) {
-      toast.error("Veuillez remplir le nom et l'email");
+    loadAgents();
+  }, []);
+
+  const handleAddAgent = async () => {
+    if (!newName.trim()) {
+      toast.error("Veuillez remplir le nom");
       return;
     }
 
-    const newAgent: Agent = {
-      id: Date.now().toString(),
-      name: newName,
-      email: newEmail,
-      phone: newPhone,
-      role: "utilisateur",
-      isActive: true,
-    };
+    if (!newPhone.trim()) {
+      toast.error("Veuillez remplir le téléphone");
+      return;
+    }
 
-    setAgents([...agents, newAgent]);
-    toast.success("Agent ajouté");
+    try {
+      await createAgent({
+        name: newName.trim(),
+        phone: newPhone.trim(),
+        whatsappOptin: true,
+      });
 
-    setNewName("");
-    setNewEmail("");
-    setNewPhone("");
+      const data = await fetchAgentsState();
+      setAgents(data.agents || []);
+
+      toast.success("Agent ajouté");
+
+      setNewName("");
+      setNewPhone("");
+    } catch (error) {
+      console.error(error);
+
+      if (error instanceof Error && error.message === "missing_name") {
+        toast.error("Nom manquant");
+      } else if (error instanceof Error && error.message === "missing_phone") {
+        toast.error("Téléphone manquant");
+      } else {
+        toast.error("Erreur lors de l’ajout de l’agent");
+      }
+    }
   };
 
-  const toggleAgentStatus = (id: string) => {
-    setAgents(
-      agents.map((agent) =>
-        agent.id === id ? { ...agent, isActive: !agent.isActive } : agent
-      )
-    );
-    toast.success("Statut modifié");
+  const toggleAgentStatus = async (agent: Agent) => {
+    try {
+      await updateAgentActive(agent.id, !agent.isActive);
+
+      const data = await fetchAgentsState();
+      setAgents(data.agents || []);
+
+      toast.success("Statut modifié");
+    } catch (error) {
+      console.error(error);
+
+      if (error instanceof Error && error.message === "missing_is_active") {
+        toast.error("Statut manquant");
+      } else if (error instanceof Error && error.message === "agent_not_found") {
+        toast.error("Agent introuvable");
+      } else {
+        toast.error("Erreur lors de la mise à jour du statut");
+      }
+    }
   };
 
-  const getRoleBadge = (role: string) => {
-    const variants: Record<string, "default" | "secondary" | "outline"> = {
-      admin: "default",
-      gestionnaire: "secondary",
-      utilisateur: "outline",
-    };
-    return variants[role] || "outline";
-  };
 
-  const getRoleLabel = (role: string) => {
-    const labels: Record<string, string> = {
-      admin: "Admin",
-      gestionnaire: "Gestionnaire",
-      utilisateur: "Utilisateur",
-    };
-    return labels[role] || role;
-  };
+
 
   const getInitials = (name: string) => {
     return name
@@ -129,20 +128,6 @@ export function AgentsPage() {
               placeholder="Ex: Marie Dupont"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              className="rounded-xl border-gray-200"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="agent-email" className="text-sm text-muted-foreground">
-              Email
-            </Label>
-            <Input
-              id="agent-email"
-              type="email"
-              placeholder="Ex: marie.dupont@example.com"
-              value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
               className="rounded-xl border-gray-200"
             />
           </div>
@@ -186,16 +171,16 @@ export function AgentsPage() {
                       <div>
                         <h4 className="font-semibold">{agent.name}</h4>
                         <Badge
-                          variant={getRoleBadge(agent.role)}
+                          variant={agent.whatsappOptin ? "default" : "secondary"}
                           className="rounded-full mt-1"
                         >
-                          {getRoleLabel(agent.role)}
+                          {agent.whatsappOptin ? "WhatsApp activé" : "WhatsApp désactivé"}
                         </Badge>
                       </div>
                       <Button
                         size="icon"
                         variant="ghost"
-                        onClick={() => toggleAgentStatus(agent.id)}
+                        onClick={() => toggleAgentStatus(agent)}
                         className="rounded-full"
                       >
                         {agent.isActive ? (
@@ -206,10 +191,7 @@ export function AgentsPage() {
                       </Button>
                     </div>
                     <div className="space-y-1.5">
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Mail className="size-3.5" />
-                        {agent.email}
-                      </div>
+                    
                       {agent.phone && (
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Phone className="size-3.5" />

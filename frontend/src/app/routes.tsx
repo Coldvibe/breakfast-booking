@@ -3,12 +3,13 @@ import { Layout } from "./Layout";
 import { DailyOfferPage } from "./pages/DailyOfferPage";
 import { RecipesPage } from "./pages/RecipesPage";
 import { StocksPage } from "./pages/StocksPage";
-import { AgentsPage } from "./pages/AgentsPage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { StatsPage } from "./pages/StatsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { EmployeeMenuPage } from "./pages/EmployeeMenuPage";
+import { UsersPage } from "./pages/UsersPage";
+import { ReservationsPage } from "./pages/ReservationsPage";
 
 export const router = createBrowserRouter([
   {
@@ -26,10 +27,11 @@ export const router = createBrowserRouter([
       { index: true, Component: DailyOfferPage },
       { path: "recipes", Component: RecipesPage },
       { path: "stocks", Component: StocksPage },
-      { path: "agents", Component: AgentsPage },
       { path: "history", Component: HistoryPage },
       { path: "stats", Component: StatsPage },
       { path: "settings", Component: SettingsPage },
+      { path: "users", Component: UsersPage },
+      { path: "reservations", Component: ReservationsPage },
     ],
   },
 ]);

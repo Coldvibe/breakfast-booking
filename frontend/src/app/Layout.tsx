@@ -10,25 +10,31 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/": { title: "Offre du jour", subtitle: "Composez le menu de demain" },
   "/recipes": { title: "Recettes", subtitle: "Gérez vos recettes" },
   "/stocks": { title: "Stocks", subtitle: "Gérez vos ingrédients" },
-  "/agents": { title: "Agents", subtitle: "Gérez les utilisateurs" },
+  "/users": { title: "Utilisateurs", subtitle: "Gérez les utilisateurs" },
   "/history": { title: "Historique", subtitle: "Offres passées" },
   "/stats": { title: "Statistiques", subtitle: "Analyses et données" },
   "/settings": { title: "Paramètres", subtitle: "Configuration" },
+  "/reservations": { title: "Réservations", subtitle: "Consultez les réservations de demain" },
 };
 
 export function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isAuthLoading } = useAuth();
   const pageInfo = PAGE_TITLES[location.pathname] || { title: "Petit Déjeuner", subtitle: "" };
 
   useEffect(() => {
+    if (isAuthLoading) return;
     if (!user) {
       navigate("/login");
     } else if (!isAdmin) {
       navigate("/employee");
     }
   }, [user, isAdmin, navigate]);
+
+  if (isAuthLoading) {
+    return null;
+  }
 
   if (!user || !isAdmin) {
     return null;

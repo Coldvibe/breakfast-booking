@@ -307,18 +307,23 @@ export function StocksPage() {
                 <div className="flex items-center gap-4">
                   <div className="w-14 h-14 rounded-xl bg-gray-100 overflow-hidden flex-shrink-0">
                     {(ingredient as any).imageUrl ? (
-                      <img
-                        src={(ingredient as any).imageUrl}
-                        alt={ingredient.name}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          e.currentTarget.style.display = "none";
-                          const fallback = e.currentTarget.nextElementSibling as HTMLElement | null;
-                          if (fallback) {
-                            fallback.style.display = "flex";
-                          }
-                        }}
-                      />
+                      <>
+                        <img
+                          src={(ingredient as any).imageUrl}
+                          alt={ingredient.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                            const fallback = e.currentTarget.nextElementSibling as HTMLElement | null;
+                            if (fallback) {
+                              fallback.style.display = "flex";
+                            }
+                          }}
+                        />
+                        <div className="w-full h-full items-center justify-center text-xs text-gray-400 hidden">
+                          IMG
+                        </div>
+                      </>
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
                         IMG

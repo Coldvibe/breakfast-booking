@@ -101,7 +101,7 @@ export function DailyOfferPage() {
           accompaniments: selectedAccompaniments,
         });
 
-        replaceBackendState(data.recipes, data.dailyOffer);
+        replaceBackendState(data.recipes, data.dailyOffer, data.ingredients);
         lastSavedPayloadRef.current = payloadKey;
         setSaveStatus("saved");
 
@@ -190,11 +190,22 @@ const accompanimentRecipes = ingredients.filter((ingredient) => ingredient.isSid
   };
 
   const getRecipeName = (recipeId: string) => {
-    return recipes.find((r) => r.id === recipeId)?.name || "Inconnu";
+    const recipe = recipes.find((r) => r.id === recipeId);
+    if (recipe) {
+      return recipe.name;
+    }
+
+    const ingredient = ingredients.find((i) => i.id === recipeId);
+    return ingredient?.name || "Inconnu";
   };
   const getRecipeImageUrl = (recipeId: string) => {
     const recipe = recipes.find((r) => r.id === recipeId);
-    return (recipe as any)?.imageUrl || "";
+    if (recipe) {
+      return (recipe as any)?.imageUrl || "";
+    }
+
+    const ingredient = ingredients.find((i) => i.id === recipeId);
+    return (ingredient as any)?.imageUrl || "";
   };
   return (
     <div className="space-y-6 pb-24">

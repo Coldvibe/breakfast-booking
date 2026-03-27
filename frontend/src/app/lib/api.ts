@@ -72,6 +72,7 @@ export async function createFood(payload: {
   name: string;
   unit: string;
   stock: number;
+  imageUrl?: string;
 }) {
   const response = await fetch("/api/admin/foods", {
     method: "POST",
@@ -99,7 +100,7 @@ export async function createFood(payload: {
 
 export async function updateFoodStock(
   foodId: string,
-  payload: { name: string; unit: string; stock: number }
+  payload: { name: string; unit: string; stock: number; imageUrl?: string }
 ) {
   const numericId = Number(foodId.replace("f-", ""));
 
@@ -212,6 +213,204 @@ export async function updateFoodThreshold(foodId: number, lowStockThreshold: num
     throw new Error(
       data?.error || data?.detail || "Impossible de modifier le seuil bas."
     );
+  }
+
+  return data;
+}
+export async function fetchAgentsState() {
+  const response = await fetch("/api/admin/agents-state");
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || data?.detail || "Impossible de charger les agents."
+    );
+  }
+
+  return data;
+}
+export async function createAgent(payload: {
+  name: string;
+  phone: string;
+  whatsappOptin?: boolean;
+}) {
+  const response = await fetch("/api/admin/agents", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || data?.detail || "Impossible de créer l’agent."
+    );
+  }
+
+  return data;
+}
+export async function updateAgentActive(agentId: string, isActive: boolean) {
+  const numericId = Number(agentId.replace("a-", ""));
+
+  const response = await fetch(`/api/admin/agents/${numericId}/active`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ isActive }),
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || data?.detail || "Impossible de modifier le statut de l’agent."
+    );
+  }
+
+  return data;
+}
+
+export async function fetchUsersState() {
+  const response = await fetch("/api/admin/users-state");
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || data?.detail || "Impossible de charger les utilisateurs."
+    );
+  }
+
+  return data;
+}
+
+export async function createUser(payload: {
+  name: string;
+  email: string;
+  phone?: string;
+  password: string;
+  role?: "admin" | "gestionnaire" | "utilisateur";
+  service?: string;
+  imageUrl?: string;
+}) {
+  const response = await fetch("/api/admin/users", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || data?.detail || "Impossible de créer l’utilisateur."
+    );
+  }
+
+  return data;
+}
+
+export async function updateUserActive(userId: string, isActive: boolean) {
+  const numericId = Number(userId.replace("u-", ""));
+
+  const response = await fetch(`/api/admin/users/${numericId}/active`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ isActive }),
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || data?.detail || "Impossible de modifier le statut de l’utilisateur."
+    );
+  }
+
+  return data;
+}
+
+export async function deleteUser(userId: string) {
+  const numericId = Number(userId.replace("u-", ""));
+
+  const res = await fetch(`/api/admin/users/${numericId}`, {
+    method: "DELETE",
+  });
+
+  if (!res.ok) {
+    throw new Error("Erreur lors de la suppression de l'utilisateur");
+  }
+
+  return await res.json();
+}
+
+export async function updateUser(
+  userId: string,
+  payload: {
+    name: string;
+    email: string;
+    phone?: string;
+    role: "admin" | "gestionnaire" | "utilisateur";
+    service?: string;
+    imageUrl?: string;
+  }
+) {
+  const numericId = Number(userId.replace("u-", ""));
+
+  const response = await fetch(`/api/admin/users/${numericId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || data?.detail || "Impossible de modifier l’utilisateur."
+    );
+  }
+
+  return data;
+}
+export async function loginUser(email: string, password: string) {
+  const res = await fetch("/api/auth/login", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify({ email, password }),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(data.error || "login_failed");
+  }
+
+  return data;
+}
+export async function fetchMe() {
+  const response = await fetch("/api/auth/me", {
+    credentials: "include",
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(data?.error || data?.detail || "not_authenticated");
   }
 
   return data;

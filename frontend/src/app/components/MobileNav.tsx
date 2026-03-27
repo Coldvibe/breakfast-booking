@@ -3,7 +3,7 @@ import { Calendar, Users, History } from "lucide-react";
 
 const NAV_ITEMS = [
   { path: "/", icon: Calendar, label: "Offre" },
-  { path: "/agents", icon: Users, label: "Agents" },
+  { path: "/users", icon: Users, label: "Utilisateurs" },
   { path: "/history", icon: History, label: "Historique" },
 ];
 

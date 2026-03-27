@@ -10,7 +10,7 @@ from fastapi import APIRouter, Form, Request,  HTTPException, Request, Body
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 # + importe get_recipe, update_recipe
-
+from hashlib import sha256
 from app.auth import admin_credentials_ok, is_admin_logged_in, require_admin
 from app.db import (
     get_conn,
@@ -51,6 +51,14 @@ from app.db import (
     update_offer_max,
     set_offer_active,
     delete_offer,
+
+    #user
+    list_users,
+    add_user,
+    set_user_active,
+    delete_user,
+    update_user,
+    authenticate_user,
     
 )
 
@@ -65,6 +73,8 @@ def _tomorrow_str() -> str:
     # On centralise le "demain" pour éviter de répéter partout
     return (date.today() + timedelta(days=1)).isoformat()
 
+def _hash_password(password: str) -> str:
+    return sha256(password.encode("utf-8")).hexdigest()
 
 def _menu_for_tomorrow(request: Request) -> list[str]:
     # menu_for_date est stocké dans app.state (défini dans main.py)
@@ -1166,9 +1176,39 @@ def api_admin_save_daily_offer_state(request: Request, payload: dict = Body(...)
     refreshed_event = get_event(event_date)
 
     frontend_recipes = []
+    frontend_ingredients = []
 
     with get_conn() as conn:
+        try:
+            conn.execute("ALTER TABLE recipes ADD COLUMN image_url TEXT")
+        except Exception:
+            pass
+
+        try:
+            conn.execute("ALTER TABLE foods ADD COLUMN stock REAL NOT NULL DEFAULT 0")
+        except Exception:
+            pass
+
+        try:
+            conn.execute("ALTER TABLE foods ADD COLUMN image_url TEXT")
+        except Exception:
+            pass
+
+        try:
+            conn.execute("ALTER TABLE foods ADD COLUMN low_stock_threshold REAL NOT NULL DEFAULT 0")
+        except Exception:
+            pass
+
         for recipe in recipes:
+            recipe_row = conn.execute(
+                """
+                SELECT image_url
+                FROM recipes
+                WHERE id = ?
+                """,
+                (recipe["id"],),
+            ).fetchone()
+
             ingredient_rows = conn.execute(
                 """
                 SELECT food_id, qty
@@ -1191,17 +1231,29 @@ def api_admin_save_daily_offer_state(request: Request, payload: dict = Body(...)
                 "name": recipe["name"],
                 "category": "principal",
                 "ingredients": recipe_ingredients,
+                "imageUrl": recipe_row["image_url"] if recipe_row else "",
                 "createdAt": None,
             })
 
-    for food in foods:
-        frontend_recipes.append({
-            "id": f"f-{food['id']}",
-            "name": food["name"],
-            "category": "accompagnement",
-            "ingredients": [],
-            "createdAt": None,
-        })
+        food_rows = conn.execute(
+            """
+            SELECT id, name, unit, stock, is_side, low_stock_threshold, image_url
+            FROM foods
+            WHERE is_active = 1
+            ORDER BY name
+            """
+        ).fetchall()
+
+        for food in food_rows:
+            frontend_ingredients.append({
+                "id": f"f-{food['id']}",
+                "name": food["name"],
+                "unit": food["unit"],
+                "stock": float(food["stock"] or 0),
+                "isSide": bool(food["is_side"]),
+                "lowStockThreshold": float(food["low_stock_threshold"] or 0),
+                "imageUrl": food["image_url"] or "",
+            })
 
     refreshed_main = []
     refreshed_acc = []
@@ -1235,6 +1287,7 @@ def api_admin_save_daily_offer_state(request: Request, payload: dict = Body(...)
     return JSONResponse({
         "success": True,
         "recipes": frontend_recipes,
+        "ingredients": frontend_ingredients,
         "dailyOffer": daily_offer,
     })
 @router.post("/api/admin/recipes")
@@ -1752,3 +1805,326 @@ def api_admin_recipes_state(request: Request):
         "ingredients": frontend_ingredients,
         "recipes": frontend_recipes,
     })
+@router.get("/api/admin/agents-state")
+def api_admin_agents_state(request: Request):
+    agents = list_agents(active_only=False)
+
+    frontend_agents = []
+    for agent in agents:
+        frontend_agents.append({
+            "id": f"a-{agent['id']}",
+            "name": agent["name"],
+            "phone": agent["phone"],
+            "whatsappOptin": bool(agent["whatsapp_optin"]),
+            "isActive": bool(agent["is_active"]),
+        })
+
+    return JSONResponse({
+        "agents": frontend_agents,
+    })
+@router.post("/api/admin/agents")
+def api_admin_create_agent(request: Request, payload: dict = Body(...)):
+    name = (payload.get("name") or "").strip()
+    phone = (payload.get("phone") or "").strip()
+    whatsapp_optin = bool(payload.get("whatsappOptin", True))
+
+    if not name:
+        return JSONResponse({"error": "missing_name"}, status_code=400)
+
+    if not phone:
+        return JSONResponse({"error": "missing_phone"}, status_code=400)
+
+    add_agent(
+        name=name,
+        phone=phone,
+        whatsapp_optin=whatsapp_optin,
+        is_active=True,
+    )
+
+    agents = list_agents(active_only=False)
+    created_agent = next(
+        (a for a in reversed(agents) if a["name"] == name and a["phone"] == phone),
+        None,
+    )
+
+    if not created_agent:
+        return JSONResponse({"error": "agent_not_created"}, status_code=500)
+
+    return JSONResponse({
+        "success": True,
+        "agent": {
+            "id": f"a-{created_agent['id']}",
+            "name": created_agent["name"],
+            "phone": created_agent["phone"],
+            "whatsappOptin": bool(created_agent["whatsapp_optin"]),
+            "isActive": bool(created_agent["is_active"]),
+        },
+    })
+@router.patch("/api/admin/agents/{agent_id}/active")
+def api_admin_toggle_agent_active(request: Request, agent_id: int, payload: dict = Body(...)):
+    is_active = payload.get("isActive", None)
+
+    if is_active is None:
+        return JSONResponse({"error": "missing_is_active"}, status_code=400)
+
+    agents = list_agents(active_only=False)
+    existing = next((a for a in agents if a["id"] == agent_id), None)
+
+    if not existing:
+        return JSONResponse({"error": "agent_not_found"}, status_code=404)
+
+    set_agent_active(agent_id, bool(is_active))
+
+    refreshed_agents = list_agents(active_only=False)
+    updated = next((a for a in refreshed_agents if a["id"] == agent_id), None)
+
+    if not updated:
+        return JSONResponse({"error": "agent_not_found"}, status_code=404)
+
+    return JSONResponse({
+        "success": True,
+        "agent": {
+            "id": f"a-{updated['id']}",
+            "name": updated["name"],
+            "phone": updated["phone"],
+            "whatsappOptin": bool(updated["whatsapp_optin"]),
+            "isActive": bool(updated["is_active"]),
+        },
+    })
+@router.get("/api/admin/users-state")
+def api_admin_users_state(request: Request):
+    users = list_users(active_only=False)
+
+    frontend_users = []
+    for user in users:
+        frontend_users.append({
+            "id": f"u-{user['id']}",
+            "name": user["name"],
+            "email": user["email"],
+            "phone": user["phone"],
+            "role": user["role"],
+            "service": user["service"],
+            "imageUrl": user["image_url"] or "",
+            "isActive": bool(user["is_active"]),
+        })
+
+    return JSONResponse({
+        "users": frontend_users,
+    })
+@router.post("/api/admin/users")
+def api_admin_create_user(request: Request, payload: dict = Body(...)):
+    name = (payload.get("name") or "").strip()
+    email = (payload.get("email") or "").strip().lower()
+    phone = (payload.get("phone") or "").strip()
+    password = payload.get("password") or ""
+    role = (payload.get("role") or "utilisateur").strip()
+    service = (payload.get("service") or "").strip()
+    image_url = (payload.get("imageUrl") or "").strip()
+
+    if not name:
+        return JSONResponse({"error": "missing_name"}, status_code=400)
+
+    if not email:
+        return JSONResponse({"error": "missing_email"}, status_code=400)
+
+    if not password:
+        return JSONResponse({"error": "missing_password"}, status_code=400)
+
+    if role not in {"admin", "gestionnaire", "utilisateur"}:
+        return JSONResponse({"error": "invalid_role"}, status_code=400)
+
+    existing_users = list_users(active_only=False)
+    duplicate = next((u for u in existing_users if u["email"].strip().lower() == email), None)
+    if duplicate:
+        return JSONResponse({"error": "duplicate_email"}, status_code=409)
+
+    try:
+        add_user(
+            name=name,
+            email=email,
+            password_hash=_hash_password(password),
+            phone=phone,
+            role=role,
+            service=service,
+            image_url=image_url,
+            is_active=True,
+        )
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+    users = list_users(active_only=False)
+    created_user = next(
+        (u for u in reversed(users) if u["email"].strip().lower() == email),
+        None,
+    )
+
+    if not created_user:
+        return JSONResponse({"error": "user_not_created"}, status_code=500)
+
+    return JSONResponse({
+        "success": True,
+        "user": {
+            "id": f"u-{created_user['id']}",
+            "name": created_user["name"],
+            "email": created_user["email"],
+            "phone": created_user["phone"],
+            "role": created_user["role"],
+            "service": created_user["service"],
+            "imageUrl": created_user["image_url"] or "",
+            "isActive": bool(created_user["is_active"]),
+        },
+    })
+
+@router.patch("/api/admin/users/{user_id}/active")
+def api_admin_update_user_active(request: Request, user_id: int, payload: dict = Body(...)):
+    is_active = payload.get("isActive", None)
+
+    if is_active is None:
+        return JSONResponse({"error": "missing_is_active"}, status_code=400)
+
+    users = list_users(active_only=False)
+    existing = next((u for u in users if u["id"] == user_id), None)
+
+    if not existing:
+        return JSONResponse({"error": "user_not_found"}, status_code=404)
+
+    set_user_active(user_id, bool(is_active))
+
+    refreshed_users = list_users(active_only=False)
+    updated = next((u for u in refreshed_users if u["id"] == user_id), None)
+
+    if not updated:
+        return JSONResponse({"error": "user_not_found"}, status_code=404)
+
+    return JSONResponse({
+        "success": True,
+        "user": {
+            "id": f"u-{updated['id']}",
+            "name": updated["name"],
+            "email": updated["email"],
+            "phone": updated["phone"],
+            "role": updated["role"],
+            "service": updated["service"],
+            "imageUrl": updated["image_url"] or "",
+            "isActive": bool(updated["is_active"]),
+        },
+    })
+
+@router.delete("/api/admin/users/{user_id}")
+def api_admin_delete_user(request: Request, user_id: int):
+    users = list_users(active_only=False)
+    existing = next((u for u in users if u["id"] == user_id), None)
+
+    if not existing:
+        return JSONResponse({"error": "user_not_found"}, status_code=404)
+
+    delete_user(user_id)
+
+    return JSONResponse({"success": True})
+
+@router.patch("/api/admin/users/{user_id}")
+def api_admin_update_user(request: Request, user_id: int, payload: dict = Body(...)):
+    name = (payload.get("name") or "").strip()
+    email = (payload.get("email") or "").strip().lower()
+    phone = (payload.get("phone") or "").strip()
+    role = (payload.get("role") or "utilisateur").strip()
+    service = (payload.get("service") or "").strip()
+    image_url = (payload.get("imageUrl") or "").strip()
+
+    if not name:
+        return JSONResponse({"error": "missing_name"}, status_code=400)
+
+    if not email:
+        return JSONResponse({"error": "missing_email"}, status_code=400)
+
+    if role not in {"admin", "gestionnaire", "utilisateur"}:
+        return JSONResponse({"error": "invalid_role"}, status_code=400)
+
+    users = list_users(active_only=False)
+    existing = next((u for u in users if u["id"] == user_id), None)
+
+    if not existing:
+        return JSONResponse({"error": "user_not_found"}, status_code=404)
+
+    duplicate = next(
+        (u for u in users if u["email"].strip().lower() == email and u["id"] != user_id),
+        None,
+    )
+    if duplicate:
+        return JSONResponse({"error": "duplicate_email"}, status_code=409)
+
+    update_user(
+        user_id=user_id,
+        name=name,
+        email=email,
+        phone=phone,
+        role=role,
+        service=service,
+        image_url=image_url,
+    )
+
+    refreshed_users = list_users(active_only=False)
+    updated = next((u for u in refreshed_users if u["id"] == user_id), None)
+
+    return JSONResponse({
+        "success": True,
+        "user": {
+            "id": f"u-{updated['id']}",
+            "name": updated["name"],
+            "email": updated["email"],
+            "phone": updated["phone"],
+            "role": updated["role"],
+            "service": updated["service"],
+            "imageUrl": updated["image_url"] or "",
+            "isActive": bool(updated["is_active"]),
+        },
+    })
+
+@router.post("/api/auth/login")
+def api_auth_login(request: Request, payload: dict = Body(...)):
+    email = (payload.get("email") or "").strip().lower()
+    password = payload.get("password") or ""
+
+    if not email:
+        return JSONResponse({"error": "missing_email"}, status_code=400)
+
+    if not password:
+        return JSONResponse({"error": "missing_password"}, status_code=400)
+
+    user = authenticate_user(email, _hash_password(password))
+
+    if not user:
+        return JSONResponse({"error": "invalid_credentials"}, status_code=401)
+
+    request.session["user"] = {
+        "id": user["id"],
+        "name": user["name"],
+        "email": user["email"],
+        "role": user["role"],
+    }
+
+    return JSONResponse({
+        "success": True,
+        "user": {
+            "id": f"u-{user['id']}",
+            "name": user["name"],
+            "email": user["email"],
+            "role": user["role"],
+        },
+    })
+
+@router.get("/api/auth/me")
+def api_auth_me(request: Request):
+    session_user = request.session.get("user")
+
+    if not session_user:
+        return JSONResponse({"error": "not_authenticated"}, status_code=401)
+
+    return JSONResponse({
+        "user": {
+            "id": f"u-{session_user['id']}",
+            "name": session_user["name"],
+            "email": session_user["email"],
+            "role": session_user["role"],
+        }
+    })    

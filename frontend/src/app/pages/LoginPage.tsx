@@ -7,27 +7,51 @@ import { Label } from "../components/ui/label";
 import { Button } from "../components/ui/button";
 import { Coffee, LogIn } from "lucide-react";
 import { toast } from "sonner";
+import { loginUser } from "../lib/api";
 
 export function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const { login } = useAuth();
+  const { setUser } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!email || !password) {
-      toast.error("Veuillez remplir tous les champs");
+    if (!email.trim()) {
+      toast.error("Email requis");
       return;
     }
 
-    const success = login(email, password);
-    if (success) {
+    if (!password.trim()) {
+      toast.error("Mot de passe requis");
+      return;
+    }
+
+    try {
+      const data = await loginUser(email.trim(), password);
+
+      setUser(data.user);
+
       toast.success("Connexion réussie");
-      navigate("/");
-    } else {
-      toast.error("Email ou mot de passe incorrect");
+
+      if (data.user.role === "admin" || data.user.role === "gestionnaire") {
+        navigate("/");
+      } else {
+        navigate("/employee");
+      }
+    } catch (error) {
+      console.error(error);
+
+      if (error instanceof Error && error.message === "invalid_credentials") {
+        toast.error("Identifiants incorrects");
+      } else if (error instanceof Error && error.message === "missing_email") {
+        toast.error("Email manquant");
+      } else if (error instanceof Error && error.message === "missing_password") {
+        toast.error("Mot de passe manquant");
+      } else {
+        toast.error("Erreur de connexion");
+      }
     }
   };
 
@@ -46,6 +70,7 @@ export function LoginPage() {
           <CardHeader>
             <CardTitle className="text-center">Connexion</CardTitle>
           </CardHeader>
+
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
@@ -77,26 +102,6 @@ export function LoginPage() {
                 Se connecter
               </Button>
             </form>
-
-            <div className="mt-6 p-4 bg-muted/50 rounded-xl">
-              <p className="text-xs text-muted-foreground text-center mb-3">
-                Comptes de démonstration :
-              </p>
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">Admin :</span>
-                  <span className="text-muted-foreground">
-                    admin@example.com / admin
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">Employé :</span>
-                  <span className="text-muted-foreground">
-                    jean@example.com / 1234
-                  </span>
-                </div>
-              </div>
-            </div>
           </CardContent>
         </Card>
       </div>

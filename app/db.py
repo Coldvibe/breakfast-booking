@@ -157,6 +157,57 @@ def init_db() -> None:
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_res_lines_res ON reservation_lines(reservation_id);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_res_lines_offer ON reservation_lines(offer_id);")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                phone TEXT NOT NULL DEFAULT '',
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'utilisateur',
+                service TEXT NOT NULL DEFAULT '',
+                image_url TEXT NOT NULL DEFAULT '',
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                CHECK (role IN ('admin', 'gestionnaire', 'utilisateur'))
+            );
+            """
+        )
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN phone TEXT NOT NULL DEFAULT ''")
+        except Exception:
+            pass
+
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT NOT NULL DEFAULT ''")
+        except Exception:
+            pass
+
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'utilisateur'")
+        except Exception:
+            pass
+
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN service TEXT NOT NULL DEFAULT ''")
+        except Exception:
+            pass
+
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN image_url TEXT NOT NULL DEFAULT ''")
+        except Exception:
+            pass
+
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1")
+        except Exception:
+            pass
+
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN created_at TEXT NOT NULL DEFAULT (datetime('now'))")
+        except Exception:
+            pass
 
 
 # -------------------------
@@ -359,7 +410,103 @@ def update_agent(agent_id: int, name: str, phone: str, whatsapp_optin: bool, is_
             (clean_name, clean_phone, 1 if whatsapp_optin else 0, 1 if is_active else 0, agent_id),
         )
 
+# -------------------------
+# USERS
+# -------------------------
 
+def list_users(active_only: bool = False) -> List[Dict[str, Any]]:
+    with get_conn() as conn:
+        if active_only:
+            rows = conn.execute(
+                """
+                SELECT id, name, email, phone, role, service, image_url, is_active, created_at
+                FROM users
+                WHERE is_active = 1
+                ORDER BY name COLLATE NOCASE
+                """
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT id, name, email, phone, role, service, image_url, is_active, created_at
+                FROM users
+                ORDER BY name COLLATE NOCASE
+                """
+            ).fetchall()
+
+        return [
+            {
+                "id": r["id"],
+                "name": r["name"],
+                "email": r["email"],
+                "phone": r["phone"],
+                "role": r["role"],
+                "service": r["service"],
+                "image_url": r["image_url"],
+                "is_active": bool(r["is_active"]),
+                "created_at": r["created_at"],
+            }
+            for r in rows
+        ]
+
+
+def add_user(
+    name: str,
+    email: str,
+    password_hash: str,
+    phone: str = "",
+    role: str = "utilisateur",
+    service: str = "",
+    image_url: str = "",
+    is_active: bool = True,
+) -> None:
+    clean_name = name.strip()
+    clean_email = email.strip().lower()
+    clean_phone = (phone or "").strip()
+    clean_role = (role or "utilisateur").strip()
+    clean_service = (service or "").strip()
+    clean_image_url = (image_url or "").strip()
+
+    if not clean_name:
+        raise ValueError("User name is required")
+    if not clean_email:
+        raise ValueError("User email is required")
+    if not password_hash:
+        raise ValueError("User password hash is required")
+    if clean_role not in {"admin", "gestionnaire", "utilisateur"}:
+        raise ValueError("Invalid user role")
+
+    with get_conn() as conn:
+        conn.execute(
+            """
+            INSERT INTO users (
+                name, email, phone, password_hash, role, service, image_url, is_active
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                clean_name,
+                clean_email,
+                clean_phone,
+                password_hash,
+                clean_role,
+                clean_service,
+                clean_image_url,
+                1 if is_active else 0,
+            ),
+        )
+def set_user_active(user_id: int, is_active: bool) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE users SET is_active = ? WHERE id = ?",
+            (1 if is_active else 0, user_id),
+        ) 
+def delete_user(user_id: int) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "DELETE FROM users WHERE id = ?",
+            (user_id,),
+        )               
 # -------------------------
 # SHIFTS
 # -------------------------
@@ -821,3 +968,66 @@ def delete_offer(offer_id: int) -> None:
             "DELETE FROM offers WHERE id = ?",
             (offer_id,),
         )
+        
+def update_user(
+    user_id: int,
+    name: str,
+    email: str,
+    phone: str,
+    role: str,
+    service: str,
+    image_url: str | None,
+) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            """
+            UPDATE users
+            SET name = ?, email = ?, phone = ?, role = ?, service = ?, image_url = ?
+            WHERE id = ?
+            """,
+            (name, email, phone, role, service, image_url, user_id),
+        )   
+
+def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
+    clean_email = email.strip().lower()
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT id, name, email, phone, password_hash, role, service, image_url, is_active, created_at
+            FROM users
+            WHERE lower(trim(email)) = ?
+            LIMIT 1
+            """,
+            (clean_email,),
+        ).fetchone()
+
+        if not row:
+            return None
+
+        return {
+            "id": row["id"],
+            "name": row["name"],
+            "email": row["email"],
+            "phone": row["phone"],
+            "password_hash": row["password_hash"],
+            "role": row["role"],
+            "service": row["service"],
+            "image_url": row["image_url"],
+            "is_active": bool(row["is_active"]),
+            "created_at": row["created_at"],
+        }
+
+def authenticate_user(email: str, password_hash: str) -> Optional[Dict[str, Any]]:
+    user = get_user_by_email(email)
+
+    if not user:
+        return None
+
+    if not user["is_active"]:
+        return None
+
+    if user["password_hash"] != password_hash:
+        return None
+
+    return user             
