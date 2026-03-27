@@ -87,6 +87,14 @@ def init_db() -> None:
             )
         except Exception:
             pass
+        try:
+            conn.execute("ALTER TABLE foods ADD COLUMN low_stock_threshold REAL NOT NULL DEFAULT 0")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE foods ADD COLUMN image_url TEXT")
+        except Exception:
+            pass        
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS recipes (

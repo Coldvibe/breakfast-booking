@@ -12,7 +12,7 @@ import type { SelectedItem } from "../types";
 import { saveDailyOfferState } from "../lib/api";
 
 export function DailyOfferPage() {
-  const { recipes, dailyOffers, replaceBackendState } = useApp();
+  const { recipes, ingredients, dailyOffers, replaceBackendState } = useApp();
 
   const tomorrow = useMemo(() => {
     if (dailyOffers.length > 0 && dailyOffers[0].date) {
@@ -146,8 +146,8 @@ export function DailyOfferPage() {
     return () => clearTimeout(timeout);
   }, [selectedMainDishes, selectedAccompaniments]);
 
-  const mainDishRecipes = recipes.filter((r) => r.category === "principal");
-  const accompanimentRecipes = recipes.filter((r) => r.category === "accompagnement");
+const mainDishRecipes = recipes.filter((r) => r.category === "principal");
+const accompanimentRecipes = ingredients.filter((ingredient) => ingredient.isSide);
 
   const isItemSelected = (recipeId: string, items: SelectedItem[]) => {
     return items.find((item) => item.recipeId === recipeId);

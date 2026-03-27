@@ -1084,7 +1084,12 @@ def api_admin_daily_offer_state(request: Request):
             pass
 
         rows = conn.execute(
-            "SELECT id, name, unit, stock, is_side FROM foods WHERE is_active = 1 ORDER BY name"
+            """
+            SELECT id, name, unit, stock, is_side, low_stock_threshold, image_url
+            FROM foods
+            WHERE is_active = 1
+            ORDER BY name
+            """
         ).fetchall()
 
     for food in rows:
@@ -1094,6 +1099,8 @@ def api_admin_daily_offer_state(request: Request):
             "unit": food["unit"],
             "stock": float(food["stock"] or 0),
             "isSide": bool(food["is_side"]),
+            "lowStockThreshold": float(food["low_stock_threshold"] or 0),
+            "imageUrl": food["image_url"] or "",
         })
 
     return JSONResponse({
@@ -1322,6 +1329,7 @@ def api_admin_create_food(request: Request, payload: dict = Body(...)):
     name = (payload.get("name") or "").strip()
     unit = (payload.get("unit") or "unit").strip()
     stock = payload.get("stock", 0)
+    image_url = (payload.get("imageUrl") or "").strip() or None
 
     if not name:
         return JSONResponse({"error": "missing_name"}, status_code=400)
@@ -1347,14 +1355,24 @@ def api_admin_create_food(request: Request, payload: dict = Body(...)):
             conn.execute("ALTER TABLE foods ADD COLUMN stock REAL NOT NULL DEFAULT 0")
         except Exception:
             pass
+        try:
+            conn.execute("ALTER TABLE foods ADD COLUMN image_url TEXT")
+        except Exception:
+            pass
 
         conn.execute(
-            "INSERT INTO foods (name, unit, is_active, stock) VALUES (?, ?, 1, ?)",
-            (name, unit, stock_value),
+            "INSERT INTO foods (name, unit, is_active, stock, image_url) VALUES (?, ?, 1, ?, ?)",
+            (name, unit, stock_value, image_url),
         )
 
         created_food = conn.execute(
-            "SELECT id, name, unit, stock FROM foods WHERE name = ? ORDER BY id DESC LIMIT 1",
+            """
+            SELECT id, name, unit, stock, is_side, low_stock_threshold, image_url
+            FROM foods
+            WHERE name = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
             (name,),
         ).fetchone()
 
@@ -1368,12 +1386,24 @@ def api_admin_create_food(request: Request, payload: dict = Body(...)):
             "name": created_food["name"],
             "unit": created_food["unit"],
             "stock": float(created_food["stock"] or 0),
+            "isSide": bool(created_food["is_side"]),
+            "lowStockThreshold": float(created_food["low_stock_threshold"] or 0),
+            "imageUrl": created_food["image_url"] or "",
         },
     })
 
 @router.patch("/api/admin/foods/{food_id}")
 def api_admin_update_food(request: Request, food_id: int, payload: dict = Body(...)):
+    name = (payload.get("name") or "").strip()
+    unit = (payload.get("unit") or "").strip()
     stock = payload.get("stock", None)
+    image_url = (payload.get("imageUrl") or "").strip() or None
+
+    if not name:
+        return JSONResponse({"error": "missing_name"}, status_code=400)
+
+    if not unit:
+        return JSONResponse({"error": "missing_unit"}, status_code=400)
 
     if stock is None:
         return JSONResponse({"error": "missing_stock"}, status_code=400)
@@ -1387,19 +1417,207 @@ def api_admin_update_food(request: Request, food_id: int, payload: dict = Body(.
         return JSONResponse({"error": "negative_stock"}, status_code=400)
 
     with get_conn() as conn:
-        # On ajoute une colonne stock si elle n'existe pas encore
         try:
             conn.execute("ALTER TABLE foods ADD COLUMN stock REAL NOT NULL DEFAULT 0")
         except Exception:
             pass
+        try:
+            conn.execute("ALTER TABLE foods ADD COLUMN image_url TEXT")
+        except Exception:
+            pass
+
+        existing = conn.execute(
+            "SELECT id FROM foods WHERE id = ?",
+            (food_id,),
+        ).fetchone()
+
+        if not existing:
+            return JSONResponse({"error": "food_not_found"}, status_code=404)
+
+        duplicate = conn.execute(
+            """
+            SELECT id
+            FROM foods
+            WHERE LOWER(name) = LOWER(?)
+              AND id != ?
+            LIMIT 1
+            """,
+            (name, food_id),
+        ).fetchone()
+
+        if duplicate:
+            return JSONResponse({"error": "duplicate_food"}, status_code=409)
 
         conn.execute(
-            "UPDATE foods SET stock = ? WHERE id = ?",
-            (stock_value, food_id),
+            """
+            UPDATE foods
+            SET name = ?, unit = ?, stock = ?, image_url = ?
+            WHERE id = ?
+            """,
+            (name, unit, stock_value, image_url, food_id),
         )
 
-    return JSONResponse({"success": True})
+        updated = conn.execute(
+            """
+            SELECT id, name, unit, stock, is_side, low_stock_threshold, image_url
+            FROM foods
+            WHERE id = ?
+            """,
+            (food_id,),
+        ).fetchone()
 
+    return JSONResponse({
+        "success": True,
+        "ingredient": {
+            "id": f"f-{updated['id']}",
+            "name": updated["name"],
+            "unit": updated["unit"],
+            "stock": float(updated["stock"] or 0),
+            "isSide": bool(updated["is_side"]),
+            "lowStockThreshold": float(updated["low_stock_threshold"] or 0),
+            "imageUrl": updated["image_url"] or "",
+        },
+    })
+@router.patch("/api/admin/foods/{food_id}/side")
+def api_admin_update_food_side(request: Request, food_id: int, payload: dict = Body(...)):
+    is_side = payload.get("isSide", None)
+
+    if is_side is None:
+        return JSONResponse({"error": "missing_is_side"}, status_code=400)
+
+    with get_conn() as conn:
+        food = conn.execute(
+            "SELECT id FROM foods WHERE id = ?",
+            (food_id,),
+        ).fetchone()
+
+        if not food:
+            return JSONResponse({"error": "food_not_found"}, status_code=404)
+
+        try:
+            conn.execute("ALTER TABLE foods ADD COLUMN is_side INTEGER NOT NULL DEFAULT 0")
+        except Exception:
+            pass
+
+        conn.execute(
+            "UPDATE foods SET is_side = ? WHERE id = ?",
+            (1 if bool(is_side) else 0, food_id),
+        )
+
+        updated = conn.execute(
+            "SELECT id, name, unit, stock, is_side FROM foods WHERE id = ?",
+            (food_id,),
+        ).fetchone()
+
+    return JSONResponse({
+        "success": True,
+        "ingredient": {
+            "id": f"f-{updated['id']}",
+            "name": updated["name"],
+            "unit": updated["unit"],
+            "stock": float(updated["stock"] or 0),
+            "isSide": bool(updated["is_side"]),
+        },
+    })
+@router.patch("/api/admin/foods/{food_id}/threshold")
+def api_admin_update_food_threshold(request: Request, food_id: int, payload: dict = Body(...)):
+    low_stock_threshold = payload.get("lowStockThreshold", None)
+
+    if low_stock_threshold is None:
+        return JSONResponse({"error": "missing_low_stock_threshold"}, status_code=400)
+
+    try:
+        threshold_value = float(low_stock_threshold)
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "invalid_low_stock_threshold"}, status_code=400)
+
+    if threshold_value < 0:
+        return JSONResponse({"error": "negative_low_stock_threshold"}, status_code=400)
+
+    with get_conn() as conn:
+        try:
+            conn.execute(
+                "ALTER TABLE foods ADD COLUMN low_stock_threshold REAL NOT NULL DEFAULT 0"
+            )
+        except Exception:
+            pass
+
+        existing = conn.execute(
+            "SELECT id FROM foods WHERE id = ?",
+            (food_id,),
+        ).fetchone()
+
+        if not existing:
+            return JSONResponse({"error": "food_not_found"}, status_code=404)
+
+        conn.execute(
+            "UPDATE foods SET low_stock_threshold = ? WHERE id = ?",
+            (threshold_value, food_id),
+        )
+
+        updated = conn.execute(
+            """
+            SELECT id, name, unit, stock, is_side, low_stock_threshold
+            FROM foods
+            WHERE id = ?
+            """,
+            (food_id,),
+        ).fetchone()
+
+    return JSONResponse({
+        "success": True,
+        "ingredient": {
+            "id": f"f-{updated['id']}",
+            "name": updated["name"],
+            "unit": updated["unit"],
+            "stock": float(updated["stock"] or 0),
+            "isSide": bool(updated["is_side"]),
+            "lowStockThreshold": float(updated["low_stock_threshold"] or 0),
+        },
+    })
+@router.delete("/api/admin/foods/{food_id}")
+def api_admin_delete_food(request: Request, food_id: int):
+    event_date = _tomorrow_str()
+    offers = list_offers_for_date(event_date)
+
+    for offer in offers:
+        if offer["is_active"] and offer["offer_type"] == "SIDE" and offer["food_id"] == food_id:
+            return JSONResponse(
+                {"error": "food_used_in_offer"},
+                status_code=409,
+            )
+
+    with get_conn() as conn:
+        used_in_recipe = conn.execute(
+            """
+            SELECT 1
+            FROM recipe_ingredients
+            WHERE food_id = ?
+            LIMIT 1
+            """,
+            (food_id,),
+        ).fetchone()
+
+        if used_in_recipe:
+            return JSONResponse(
+                {"error": "food_used_in_recipe"},
+                status_code=409,
+            )
+
+        existing = conn.execute(
+            "SELECT id FROM foods WHERE id = ?",
+            (food_id,),
+        ).fetchone()
+
+        if not existing:
+            return JSONResponse(
+                {"error": "food_not_found"},
+                status_code=404,
+            )
+
+        conn.execute("DELETE FROM foods WHERE id = ?", (food_id,))
+
+    return JSONResponse({"success": True})
 @router.patch("/api/admin/recipes/{recipe_id}")
 def api_admin_update_recipe(request: Request, recipe_id: int, payload: dict = Body(...)):
     name = (payload.get("name") or "").strip()
@@ -1484,17 +1702,24 @@ def api_admin_recipes_state(request: Request):
             pass
 
         food_rows = conn.execute(
-            "SELECT id, name, unit, stock, is_side FROM foods WHERE is_active = 1 ORDER BY name"
+            """
+            SELECT id, name, unit, stock, is_side, low_stock_threshold, image_url
+            FROM foods
+            WHERE is_active = 1
+            ORDER BY name
+            """
         ).fetchall()
 
         for food in food_rows:
             frontend_ingredients.append({
-                "id": f"f-{food['id']}",
-                "name": food["name"],
-                "unit": food["unit"],
-                "stock": float(food["stock"] or 0),
-                "isSide": bool(food["is_side"]),
-            })
+            "id": f"f-{food['id']}",
+            "name": food["name"],
+            "unit": food["unit"],
+            "stock": float(food["stock"] or 0),
+            "isSide": bool(food["is_side"]),
+            "lowStockThreshold": float(food["low_stock_threshold"] or 0),
+            "imageUrl": food["image_url"] or "",
+        })
 
         for recipe in recipe_rows:
             ingredient_rows = conn.execute(

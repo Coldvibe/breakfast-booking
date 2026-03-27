@@ -97,24 +97,29 @@ export async function createFood(payload: {
   return response.json();
 }
 
-export async function updateFoodStock(foodId: string, stock: number) {
-  const backendId = foodId.startsWith("f-")
-    ? foodId.replace("f-", "")
-    : foodId;
+export async function updateFoodStock(
+  foodId: string,
+  payload: { name: string; unit: string; stock: number }
+) {
+  const numericId = Number(foodId.replace("f-", ""));
 
-  const response = await fetch(`/api/admin/foods/${backendId}`, {
+  const response = await fetch(`/api/admin/foods/${numericId}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ stock }),
+    body: JSON.stringify(payload),
   });
 
+  const data = await response.json().catch(() => null);
+
   if (!response.ok) {
-    throw new Error("Erreur API updateFoodStock");
+    throw new Error(
+      data?.error || data?.detail || "Impossible de modifier l’ingrédient."
+    );
   }
 
-  return response.json();
+  return data;
 }
 
 export async function updateRecipe(payload: {
@@ -161,4 +166,53 @@ export async function fetchRecipesState() {
   }
 
   return response.json();
+}
+export async function updateFoodSide(foodId: number, isSide: boolean) {
+  const response = await fetch(`/api/admin/foods/${foodId}/side`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ isSide }),
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(data?.error || data?.detail || "Impossible de modifier le type d’ingrédient.");
+  }
+
+  return data;
+}
+export async function deleteFood(foodId: number) {
+  const response = await fetch(`/api/admin/foods/${foodId}`, {
+    method: "DELETE",
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(data?.error || data?.detail || "Impossible de supprimer l’ingrédient.");
+  }
+
+  return data;
+}
+export async function updateFoodThreshold(foodId: number, lowStockThreshold: number) {
+  const response = await fetch(`/api/admin/foods/${foodId}/threshold`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ lowStockThreshold }),
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || data?.detail || "Impossible de modifier le seuil bas."
+    );
+  }
+
+  return data;
 }
