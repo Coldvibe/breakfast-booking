@@ -4,6 +4,7 @@ export interface Ingredient {
   name: string;
   unit: string; // "pièce", "g", "ml", "pincée"
   stock: number;
+  isSide?: boolean;
 }
 
 export interface RecipeIngredient {

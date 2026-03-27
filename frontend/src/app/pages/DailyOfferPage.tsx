@@ -8,7 +8,7 @@ import { Badge } from "../components/ui/badge";
 import { Plus, Minus } from "lucide-react";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 import type { SelectedItem } from "../types";
-import { getRecipeImage } from "../data/recipeImages";
+
 import { saveDailyOfferState } from "../lib/api";
 
 export function DailyOfferPage() {
@@ -192,7 +192,10 @@ export function DailyOfferPage() {
   const getRecipeName = (recipeId: string) => {
     return recipes.find((r) => r.id === recipeId)?.name || "Inconnu";
   };
-
+  const getRecipeImageUrl = (recipeId: string) => {
+    const recipe = recipes.find((r) => r.id === recipeId);
+    return (recipe as any)?.imageUrl || "";
+  };
   return (
     <div className="space-y-6 pb-24">
       {/* Header avec date */}
@@ -293,7 +296,7 @@ export function DailyOfferPage() {
                         <div className="flex items-center gap-4">
                           <div className="size-20 rounded-xl overflow-hidden bg-muted flex-shrink-0">
                             <ImageWithFallback
-                              src={getRecipeImage(recipe.id)}
+                              src={getRecipeImageUrl(recipe.id)}
                               alt={recipe.name}
                               className="w-full h-full object-cover"
                             />
@@ -381,7 +384,7 @@ export function DailyOfferPage() {
                         <div className="flex items-center gap-4">
                           <div className="size-20 rounded-xl overflow-hidden bg-muted flex-shrink-0">
                             <ImageWithFallback
-                              src={getRecipeImage(recipe.id)}
+                              src={getRecipeImageUrl(recipe.id)}
                               alt={recipe.name}
                               className="w-full h-full object-cover"
                             />

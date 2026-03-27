@@ -9,6 +9,7 @@ import { Badge } from "../components/ui/badge";
 import { Plus, Trash2, ChefHat, Minus, Pencil } from "lucide-react";
 import type { Recipe, RecipeIngredient } from "../types";
 import { toast } from "sonner";
+import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 import {
   createRecipe,
   fetchRecipesState,
@@ -21,7 +22,7 @@ export function RecipesPage() {
   const mainRecipes = recipes.filter((recipe) => recipe.category === "principal");
 
   const [recipeName, setRecipeName] = useState("");
-  const [recipeCategory] = useState<"principal">("principal");
+  const [recipeImageUrl, setRecipeImageUrl] = useState("");
   const [recipeIngredients, setRecipeIngredients] = useState<RecipeIngredient[]>([]);
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
 
@@ -64,6 +65,7 @@ export function RecipesPage() {
           id: editingRecipe.id,
           name: recipeName,
           ingredients: validIngredients,
+          imageUrl: recipeImageUrl,
         });
 
         toast.success("Recette modifiée avec succès");
@@ -71,6 +73,7 @@ export function RecipesPage() {
         await createRecipe({
           name: recipeName,
           ingredients: validIngredients,
+          imageUrl: recipeImageUrl,
         });
 
         toast.success(`Recette "${recipeName}" créée`);
@@ -79,13 +82,14 @@ export function RecipesPage() {
       const refreshed = await fetchRecipesState();
       replaceBackendState(
         refreshed.recipes,
-        null,
+        undefined,
         refreshed.ingredients
       );
 
       setEditingRecipe(null);
       setRecipeName("");
       setRecipeIngredients([]);
+      setRecipeImageUrl("");
     } catch (error) {
       console.error(error);
       toast.error("Erreur lors de l'enregistrement");
@@ -140,7 +144,27 @@ export function RecipesPage() {
               className="rounded-xl border-gray-200"
             />
           </div>
-
+          <div className="space-y-2">
+            <Label htmlFor="recipe-image" className="text-sm text-muted-foreground">
+              URL de l'image
+            </Label>
+            <Input
+              id="recipe-image"
+              placeholder="https://..."
+              value={recipeImageUrl}
+              onChange={(e) => setRecipeImageUrl(e.target.value)}
+              className="rounded-xl border-gray-200"
+            />
+          </div>
+          {recipeImageUrl && (
+            <div className="rounded-xl overflow-hidden bg-muted border border-border">
+              <ImageWithFallback
+                src={recipeImageUrl}
+                alt="Aperçu recette"
+                className="w-full h-48 object-cover"
+              />
+            </div>
+          )}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <Label className="text-sm text-muted-foreground">Ingrédients</Label>
@@ -223,6 +247,7 @@ export function RecipesPage() {
                 setEditingRecipe(null);
                 setRecipeName("");
                 setRecipeIngredients([]);
+                setRecipeImageUrl("");
               }}
             >
               Annuler la modification
@@ -245,78 +270,92 @@ export function RecipesPage() {
             {mainRecipes.map((recipe) => (
               <Card key={recipe.id} className="rounded-2xl border-0 shadow-sm">
                 <CardContent className="p-4">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="font-semibold text-lg">{recipe.name}</h3>
-                      <Badge
-                        variant={getCategoryColor(recipe.category)}
-                        className="mt-2 rounded-full"
-                      >
-                        {getCategoryLabel(recipe.category)}
-                      </Badge>
+                  <div className="flex gap-4">
+                    <div className="w-24 h-24 rounded-xl overflow-hidden bg-muted flex-shrink-0">
+                      <ImageWithFallback
+                        src={(recipe as any).imageUrl || ""}
+                        alt={recipe.name}
+                        className="w-full h-full object-cover"
+                      />
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="rounded-full"
-                        onClick={() => {
-                          setEditingRecipe(recipe);
-                          setRecipeName(recipe.name);
-                          setRecipeIngredients(recipe.ingredients);
-                        }}
-                      >
-                        <Pencil className="size-4" />
-                      </Button>
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <h3 className="font-semibold text-lg">{recipe.name}</h3>
+                          <Badge
+                            variant={getCategoryColor(recipe.category)}
+                            className="mt-2 rounded-full"
+                          >
+                            {getCategoryLabel(recipe.category)}
+                          </Badge>
+                        </div>
 
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="text-destructive rounded-full"
-                        onClick={async () => {
-                          try {
-                            await deleteRecipeById(recipe.id);
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="rounded-full"
+                            onClick={() => {
+                              setEditingRecipe(recipe);
+                              setRecipeName(recipe.name);
+                              setRecipeImageUrl((recipe as any).imageUrl || "");
+                              setRecipeIngredients(recipe.ingredients);
+                            }}
+                          >
+                            <Pencil className="size-4" />
+                          </Button>
 
-                            const refreshed = await fetchRecipesState();
-                            replaceBackendState(
-                              refreshed.recipes,
-                              null,
-                              refreshed.ingredients
-                            );
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="text-destructive rounded-full"
+                            onClick={async () => {
+                              try {
+                                await deleteRecipeById(recipe.id);
 
-                            toast.success("Recette supprimée");
-                          } catch (error) {
-                            console.error(error);
+                                const refreshed = await fetchRecipesState();
+                                replaceBackendState(
+                                  refreshed.recipes,
+                                  undefined,
+                                  refreshed.ingredients
+                                );
 
-                            if (
-                              error instanceof Error &&
-                              error.message === "recipe_used_in_offer"
-                            ) {
-                              toast.error("Cette recette est utilisée dans l'offre du jour");
-                            } else {
-                              toast.error("Erreur lors de la suppression");
-                            }
-                          }
-                        }}
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
-                    </div>
-                  </div>
+                                toast.success("Recette supprimée");
+                              } catch (error) {
+                                console.error(error);
 
-                  <div className="space-y-2 bg-muted/30 rounded-xl p-3">
-                    <div className="text-sm font-medium text-muted-foreground">
-                      Ingrédients :
-                    </div>
-                    {recipe.ingredients.map((ing, idx) => (
-                      <div key={idx} className="text-sm flex items-center gap-2">
-                        <span className="size-1.5 rounded-full bg-primary" />
-                        {getIngredientName(ing.ingredientId)} : {ing.quantity}{" "}
-                        {getIngredientUnit(ing.ingredientId)}
+                                if (
+                                  error instanceof Error &&
+                                  error.message === "recipe_used_in_offer"
+                                ) {
+                                  toast.error("Cette recette est utilisée dans l'offre du jour");
+                                } else {
+                                  toast.error("Erreur lors de la suppression");
+                                }
+                              }
+                            }}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </div>
                       </div>
-                    ))}
+
+                      <div className="space-y-2 bg-muted/30 rounded-xl p-3">
+                        <div className="text-sm font-medium text-muted-foreground">
+                          Ingrédients :
+                        </div>
+                        {recipe.ingredients.map((ing, idx) => (
+                          <div key={idx} className="text-sm flex items-center gap-2">
+                            <span className="size-1.5 rounded-full bg-primary" />
+                            {getIngredientName(ing.ingredientId)} : {ing.quantity}{" "}
+                            {getIngredientUnit(ing.ingredientId)}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
+
                 </CardContent>
               </Card>
             ))}

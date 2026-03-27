@@ -1005,7 +1005,21 @@ def api_admin_daily_offer_state(request: Request):
     frontend_recipes = []
 
     with get_conn() as conn:
+        try:
+            conn.execute("ALTER TABLE recipes ADD COLUMN image_url TEXT")
+        except Exception:
+            pass
+
         for recipe in recipes:
+            recipe_row = conn.execute(
+                """
+                SELECT image_url
+                FROM recipes
+                WHERE id = ?
+                """,
+                (recipe["id"],),
+            ).fetchone()
+
             ingredient_rows = conn.execute(
                 """
                 SELECT food_id, qty
@@ -1028,6 +1042,7 @@ def api_admin_daily_offer_state(request: Request):
                 "name": recipe["name"],
                 "category": "principal",
                 "ingredients": recipe_ingredients,
+                "imageUrl": recipe_row["image_url"] if recipe_row else None,
                 "createdAt": None,
             })
 
@@ -1069,7 +1084,7 @@ def api_admin_daily_offer_state(request: Request):
             pass
 
         rows = conn.execute(
-            "SELECT id, name, unit, stock FROM foods WHERE is_active = 1 ORDER BY name"
+            "SELECT id, name, unit, stock, is_side FROM foods WHERE is_active = 1 ORDER BY name"
         ).fetchall()
 
     for food in rows:
@@ -1078,6 +1093,7 @@ def api_admin_daily_offer_state(request: Request):
             "name": food["name"],
             "unit": food["unit"],
             "stock": float(food["stock"] or 0),
+            "isSide": bool(food["is_side"]),
         })
 
     return JSONResponse({
@@ -1218,6 +1234,7 @@ def api_admin_save_daily_offer_state(request: Request, payload: dict = Body(...)
 def api_admin_create_recipe(request: Request, payload: dict = Body(...)):
     name = (payload.get("name") or "").strip()
     ingredients = payload.get("ingredients", [])
+    image_url = (payload.get("imageUrl") or "").strip() or None
 
     if not name:
         return JSONResponse({"error": "missing_name"}, status_code=400)
@@ -1227,6 +1244,16 @@ def api_admin_create_recipe(request: Request, payload: dict = Body(...)):
 
     # 1. créer la recette
     add_recipe(name)
+    with get_conn() as conn:
+        try:
+            conn.execute("ALTER TABLE recipes ADD COLUMN image_url TEXT")
+        except Exception:
+            pass
+
+        conn.execute(
+            "UPDATE recipes SET image_url = ? WHERE name = ?",
+            (image_url, name),
+        )
 
     # 2. relire la recette créée pour récupérer son id
     recipes = list_recipes(active_only=False)
@@ -1377,6 +1404,8 @@ def api_admin_update_food(request: Request, food_id: int, payload: dict = Body(.
 def api_admin_update_recipe(request: Request, recipe_id: int, payload: dict = Body(...)):
     name = (payload.get("name") or "").strip()
     ingredients = payload.get("ingredients", [])
+    image_url = (payload.get("imageUrl") or "").strip() or None
+    
 
     if not name:
         return JSONResponse({"error": "missing_name"}, status_code=400)
@@ -1395,9 +1424,14 @@ def api_admin_update_recipe(request: Request, recipe_id: int, payload: dict = Bo
             return JSONResponse({"error": "recipe_not_found"}, status_code=404)
 
         # mettre à jour le nom
+        try:
+            conn.execute("ALTER TABLE recipes ADD COLUMN image_url TEXT")
+        except Exception:
+            pass
+
         conn.execute(
-            "UPDATE recipes SET name = ? WHERE id = ?",
-            (name, recipe_id),
+            "UPDATE recipes SET name = ?, image_url = ? WHERE id = ?",
+            (name, image_url, recipe_id),
         )
 
         # remplacer les ingrédients
@@ -1430,7 +1464,15 @@ def api_admin_update_recipe(request: Request, recipe_id: int, payload: dict = Bo
 
 @router.get("/api/admin/recipes-state")
 def api_admin_recipes_state(request: Request):
-    recipes = list_recipes(active_only=True)
+    with get_conn() as conn:
+        recipe_rows = conn.execute(
+            """
+            SELECT id, name, is_active, image_url
+            FROM recipes
+            WHERE is_active = 1
+            ORDER BY name
+            """
+        ).fetchall()
 
     frontend_ingredients = []
     frontend_recipes = []
@@ -1442,7 +1484,7 @@ def api_admin_recipes_state(request: Request):
             pass
 
         food_rows = conn.execute(
-            "SELECT id, name, unit, stock FROM foods WHERE is_active = 1 ORDER BY name"
+            "SELECT id, name, unit, stock, is_side FROM foods WHERE is_active = 1 ORDER BY name"
         ).fetchall()
 
         for food in food_rows:
@@ -1451,9 +1493,10 @@ def api_admin_recipes_state(request: Request):
                 "name": food["name"],
                 "unit": food["unit"],
                 "stock": float(food["stock"] or 0),
+                "isSide": bool(food["is_side"]),
             })
 
-        for recipe in recipes:
+        for recipe in recipe_rows:
             ingredient_rows = conn.execute(
                 """
                 SELECT food_id, qty
@@ -1476,6 +1519,7 @@ def api_admin_recipes_state(request: Request):
                 "name": recipe["name"],
                 "category": "principal",
                 "ingredients": recipe_ingredients,
+                "imageUrl": recipe["image_url"],
                 "createdAt": None,
             })
 

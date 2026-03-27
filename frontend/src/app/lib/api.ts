@@ -28,6 +28,7 @@ export async function saveDailyOfferState(payload: any) {
 export async function createRecipe(payload: {
   name: string;
   ingredients: { ingredientId: string; quantity: number }[];
+  imageUrl?: string;
 }) {
   const response = await fetch("/api/admin/recipes", {
     method: "POST",
@@ -120,6 +121,7 @@ export async function updateRecipe(payload: {
   id: string;
   name: string;
   ingredients: { ingredientId: string; quantity: number }[];
+  imageUrl?: string;
 }) {
   const backendId = payload.id.startsWith("r-")
     ? payload.id.replace("r-", "")
@@ -133,6 +135,7 @@ export async function updateRecipe(payload: {
     body: JSON.stringify({
       name: payload.name,
       ingredients: payload.ingredients,
+      imageUrl: payload.imageUrl || "",
     }),
   });
 

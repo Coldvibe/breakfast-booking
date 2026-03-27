@@ -17,7 +17,7 @@ interface AppContextType {
   deleteDailyOffer: (id: string) => void;
   replaceBackendState: (
     recipes: Recipe[],
-    dailyOffer: DailyOffer | null,
+    dailyOffer?: DailyOffer | null,
     ingredients?: Ingredient[]
   ) => void;
 }
@@ -161,7 +161,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
   const replaceBackendState = (
     recipesFromBackend: Recipe[],
-    dailyOfferFromBackend: DailyOffer | null,
+    dailyOfferFromBackend?: DailyOffer | null,
     ingredientsFromBackend?: Ingredient[]
   ) => {
     if (ingredientsFromBackend) {
@@ -170,10 +170,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     setRecipes(recipesFromBackend || []);
 
-    if (dailyOfferFromBackend) {
-      setDailyOffers([dailyOfferFromBackend]);
-    } else {
-      setDailyOffers([]);
+    if (dailyOfferFromBackend !== undefined) {
+      if (dailyOfferFromBackend) {
+        setDailyOffers([dailyOfferFromBackend]);
+      } else {
+        setDailyOffers([]);
+      }
     }
   };
 

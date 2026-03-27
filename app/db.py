@@ -81,6 +81,12 @@ def init_db() -> None:
             );
             """
         )
+        try:
+            conn.execute(
+                "ALTER TABLE foods ADD COLUMN is_side INTEGER NOT NULL DEFAULT 0"
+            )
+        except Exception:
+            pass
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS recipes (
@@ -90,6 +96,12 @@ def init_db() -> None:
             );
             """
         )
+        try:
+            conn.execute(
+                "ALTER TABLE recipes ADD COLUMN image_url TEXT"
+            )
+        except Exception:
+            pass
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS recipe_ingredients (
