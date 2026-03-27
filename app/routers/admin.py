@@ -1004,23 +1004,32 @@ def api_admin_daily_offer_state(request: Request):
 
     frontend_recipes = []
 
-    for recipe in recipes:
-        frontend_recipes.append({
-            "id": f"r-{recipe['id']}",
-            "name": recipe["name"],
-            "category": "principal",
-            "ingredients": [],
-            "createdAt": None,
-        })
+    with get_conn() as conn:
+        for recipe in recipes:
+            ingredient_rows = conn.execute(
+                """
+                SELECT food_id, qty
+                FROM recipe_ingredients
+                WHERE recipe_id = ?
+                ORDER BY id
+                """,
+                (recipe["id"],),
+            ).fetchall()
 
-    for food in foods:
-        frontend_recipes.append({
-            "id": f"f-{food['id']}",
-            "name": food["name"],
-            "category": "accompagnement",
-            "ingredients": [],
-            "createdAt": None,
-        })
+            recipe_ingredients = []
+            for row in ingredient_rows:
+                recipe_ingredients.append({
+                    "ingredientId": f"f-{row['food_id']}",
+                    "quantity": float(row["qty"] or 0),
+                })
+
+            frontend_recipes.append({
+                "id": f"r-{recipe['id']}",
+                "name": recipe["name"],
+                "category": "principal",
+                "ingredients": recipe_ingredients,
+                "createdAt": None,
+            })
 
     main_dishes = []
     accompaniments = []
