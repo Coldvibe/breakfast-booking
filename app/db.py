@@ -1031,3 +1031,33 @@ def authenticate_user(email: str, password_hash: str) -> Optional[Dict[str, Any]
         return None
 
     return user             
+
+def delete_reservation_for_event_and_name(event_id: int, name: str) -> None:
+    clean_name = name.strip().lower()
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT id
+            FROM reservations
+            WHERE event_id = ?
+              AND lower(trim(name)) = ?
+            LIMIT 1
+            """,
+            (event_id, clean_name),
+        ).fetchone()
+
+        if not row:
+            return
+
+        reservation_id = int(row["id"])
+
+        conn.execute(
+            "DELETE FROM reservation_lines WHERE reservation_id = ?",
+            (reservation_id,),
+        )
+        conn.execute(
+            "DELETE FROM reservations WHERE id = ?",
+            (reservation_id,),
+        )
+

@@ -11,7 +11,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   setUser: (user: User | null) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
   isAdmin: boolean;
   isAuthLoading: boolean;
 }
@@ -21,15 +21,18 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
 
-  const logout = () => {
-    setUser(null);
-
-    // Optionnel : clear session côté backend plus tard
-    fetch("/api/auth/logout", {
-      method: "POST",
-      credentials: "include",
-    }).catch(() => {});
-  };
+  const logout = async () => {
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch (error) {
+      console.error("Logout backend error", error);
+    } finally {
+      setUser(null);
+    }
+};
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
     useEffect(() => {

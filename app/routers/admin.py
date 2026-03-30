@@ -59,6 +59,11 @@ from app.db import (
     delete_user,
     update_user,
     authenticate_user,
+    create_reservation,
+    set_reservation_lines,
+    delete_reservation_for_event_and_name,
+    list_active_offers_for_date,
+    list_reservations_with_lines,
     
 )
 
@@ -2127,4 +2132,228 @@ def api_auth_me(request: Request):
             "email": session_user["email"],
             "role": session_user["role"],
         }
-    })    
+    }) 
+
+@router.get("/api/admin/reservations-state")
+def api_admin_reservations_state(request: Request):
+    event_date = _tomorrow_str()
+    ensure_event_for_date(event_date, _menu_for_tomorrow(request))
+
+    snapshot = get_tomorrow_admin_snapshot(event_date)
+    event = snapshot.get("event")
+    reservations = snapshot.get("reservations", [])
+    totals = snapshot.get("totals", {})
+    offers = snapshot.get("offers", {})
+
+    frontend_reservations = []
+    for index, reservation in enumerate(reservations, start=1):
+        frontend_lines = []
+        for line in reservation.get("lines", []):
+            frontend_lines.append({
+                "label": line.get("label") or "?",
+                "qty": int(line.get("qty") or 0),
+                "type": line.get("type") or "",
+            })
+
+        frontend_reservations.append({
+            "id": f"res-{index}",
+            "name": reservation.get("name") or "Inconnu",
+            "lines": frontend_lines,
+        })
+
+    return JSONResponse({
+        "date": event_date,
+        "isPlanned": bool(event.get("is_planned", True)) if event else False,
+        "isOpen": bool(event["open"]) if event else False,
+        "reservations": frontend_reservations,
+        "totals": {
+            "mains": totals.get("mains", {}),
+            "sides": totals.get("sides", {}),
+        },
+        "offers": {
+            "mains": offers.get("mains", []),
+            "sides": offers.get("sides", []),
+        },
+    })   
+
+@router.post("/api/auth/logout")
+def api_auth_logout(request: Request):
+    request.session.pop("user", None)
+    request.session.pop("admin", None)
+    return JSONResponse({"success": True})    
+
+@router.post("/api/employee/reservation")
+def api_employee_create_reservation(request: Request, payload: dict = Body(...)):
+    session_user = request.session.get("user")
+    if not session_user:
+        return JSONResponse({"error": "not_authenticated"}, status_code=401)
+    if session_user.get("role") != "utilisateur":
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+
+    event_date = _tomorrow_str()
+    ensure_event_for_date(event_date, _menu_for_tomorrow(request))
+    event = get_event(event_date)
+
+    if not event:
+        return JSONResponse({"error": "event_not_found"}, status_code=404)
+
+    if not event.get("is_planned", True):
+        return JSONResponse({"error": "event_not_planned"}, status_code=409)
+
+    if not event.get("open", False):
+        return JSONResponse({"error": "reservations_closed"}, status_code=409)
+
+    main_dishes = payload.get("mainDishes", {})
+    accompaniments = payload.get("accompaniments", {})
+
+    if not isinstance(main_dishes, dict) or len(main_dishes) == 0:
+        return JSONResponse({"error": "missing_main_dishes"}, status_code=400)
+
+    offers = list_active_offers_for_date(event_date)
+    active_mains = offers.get("mains", [])
+    active_sides = offers.get("sides", [])
+
+    all_offer_lines: list[tuple[int, int]] = []
+
+    # Plats principaux
+    for recipe_id, qty_raw in main_dishes.items():
+        try:
+            qty = int(qty_raw)
+        except (TypeError, ValueError):
+            continue
+
+        if qty <= 0:
+            continue
+
+        main_offer = next(
+            (o for o in active_mains if f"r-{o['recipe_id']}" == recipe_id),
+            None,
+        )
+        if not main_offer:
+            return JSONResponse({"error": "invalid_main_dish"}, status_code=400)
+
+        max_per_person = int(main_offer.get("max_per_person") or 1)
+        if qty > max_per_person:
+            return JSONResponse({"error": "main_dish_quantity_exceeded"}, status_code=400)
+
+        all_offer_lines.append((int(main_offer["id"]), qty))
+
+    if len(all_offer_lines) == 0:
+        return JSONResponse({"error": "missing_main_dishes"}, status_code=400)
+
+    # Accompagnements
+    for recipe_id, qty_raw in accompaniments.items():
+        try:
+            qty = int(qty_raw)
+        except (TypeError, ValueError):
+            continue
+
+        if qty <= 0:
+            continue
+
+        side_offer = next(
+            (o for o in active_sides if f"f-{o['food_id']}" == recipe_id),
+            None,
+        )
+        if not side_offer:
+            return JSONResponse({"error": "invalid_accompaniment"}, status_code=400)
+
+        max_per_person = int(side_offer.get("max_per_person") or 1)
+        if qty > max_per_person:
+            return JSONResponse({"error": "accompaniment_quantity_exceeded"}, status_code=400)
+
+        all_offer_lines.append((int(side_offer["id"]), qty))
+
+    employee_name = session_user["name"]
+
+    # Remplace l’ancienne réservation éventuelle
+    delete_reservation_for_event_and_name(event["id"], employee_name)
+
+    reservation_id = create_reservation(
+        event_id=event["id"],
+        name=employee_name,
+        bring="",
+    )
+
+    set_reservation_lines(reservation_id, all_offer_lines)
+
+    return JSONResponse({"success": True})
+
+@router.get("/api/employee/reservation")
+def api_employee_get_reservation(request: Request):
+    session_user = request.session.get("user")
+    if not session_user:
+        return JSONResponse({"error": "not_authenticated"}, status_code=401)
+
+    if session_user.get("role") != "utilisateur":
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+
+    event_date = _tomorrow_str()
+    ensure_event_for_date(event_date, _menu_for_tomorrow(request))
+    event = get_event(event_date)
+
+    if not event:
+        return JSONResponse({"error": "event_not_found"}, status_code=404)
+
+    reservations = list_reservations_with_lines(event["id"])
+    current = next(
+        (r for r in reservations if (r.get("name") or "").strip() == (session_user.get("name") or "").strip()),
+        None,
+    )
+
+    if not current:
+        return JSONResponse({
+            "date": event_date,
+            "reservation": None,
+        })
+
+    main_dishes = {}
+    accompaniments = {}
+
+    main_offers = list_active_offers_for_date(event_date).get("mains", [])
+    side_offers = list_active_offers_for_date(event_date).get("sides", [])
+
+    for line in current.get("lines", []):
+        label = line.get("label")
+        qty = int(line.get("qty") or 0)
+        line_type = line.get("type")
+
+        if qty <= 0:
+            continue
+
+        if line_type == "MAIN":
+            match = next((o for o in main_offers if o.get("label") == label), None)
+            if match and match.get("recipe_id"):
+                main_dishes[f"r-{match['recipe_id']}"] = qty
+
+        elif line_type == "SIDE":
+            match = next((o for o in side_offers if o.get("label") == label), None)
+            if match and match.get("food_id"):
+                accompaniments[f"f-{match['food_id']}"] = qty
+
+    return JSONResponse({
+        "date": event_date,
+        "reservation": {
+            "mainDishes": main_dishes,
+            "accompaniments": accompaniments,
+        },
+    })
+@router.delete("/api/employee/reservation")
+def api_employee_delete_reservation(request: Request):
+    session_user = request.session.get("user")
+    if not session_user:
+        return JSONResponse({"error": "not_authenticated"}, status_code=401)
+
+    if session_user.get("role") != "utilisateur":
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+
+    event_date = _tomorrow_str()
+    ensure_event_for_date(event_date, _menu_for_tomorrow(request))
+    event = get_event(event_date)
+
+    if not event:
+        return JSONResponse({"error": "event_not_found"}, status_code=404)
+
+    delete_reservation_for_event_and_name(event["id"], session_user["name"])
+
+    return JSONResponse({"success": True})

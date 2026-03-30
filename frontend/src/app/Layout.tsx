@@ -25,12 +25,16 @@ export function Layout() {
 
   useEffect(() => {
     if (isAuthLoading) return;
+
     if (!user) {
-      navigate("/login");
-    } else if (!isAdmin) {
-      navigate("/employee");
+      navigate("/login", { replace: true });
+      return;
     }
-  }, [user, isAdmin, navigate]);
+
+    if (!isAdmin) {
+      navigate("/employee", { replace: true });
+    }
+  }, [user, isAdmin, isAuthLoading, navigate]);
 
   if (isAuthLoading) {
     return null;

@@ -415,3 +415,76 @@ export async function fetchMe() {
 
   return data;
 }
+
+export async function fetchReservationsState() {
+  const response = await fetch("/api/admin/reservations-state", {
+    credentials: "include",
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || data?.detail || "Impossible de charger les réservations."
+    );
+  }
+
+  return data;
+}
+
+export async function fetchEmployeeReservation() {
+  const response = await fetch("/api/employee/reservation", {
+    credentials: "include",
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || data?.detail || "Impossible de charger la réservation employé."
+    );
+  }
+
+  return data;
+}
+
+export async function saveEmployeeReservation(payload: {
+  mainDishes: Record<string, number>;
+  accompaniments: Record<string, number>;
+}) {
+  const response = await fetch("/api/employee/reservation", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || data?.detail || "Impossible d’enregistrer la réservation."
+    );
+  }
+
+  return data;
+}
+
+export async function deleteEmployeeReservation() {
+  const response = await fetch("/api/employee/reservation", {
+    method: "DELETE",
+    credentials: "include",
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || data?.detail || "Impossible d’annuler la réservation."
+    );
+  }
+
+  return data;
+}
