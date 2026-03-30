@@ -5,32 +5,40 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Button } from "../components/ui/button";
-import { Coffee, LogIn } from "lucide-react";
+import { Coffee, Eye, EyeOff, LogIn, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { loginUser } from "../lib/api";
 
 export function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState("");
+
   const { setUser } = useAuth();
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError("");
 
     if (!email.trim()) {
+      setFormError("Veuillez renseigner votre email.");
       toast.error("Email requis");
       return;
     }
 
     if (!password.trim()) {
+      setFormError("Veuillez renseigner votre mot de passe.");
       toast.error("Mot de passe requis");
       return;
     }
 
     try {
-      const data = await loginUser(email.trim(), password);
+      setIsSubmitting(true);
 
+      const data = await loginUser(email.trim(), password);
       setUser(data.user);
 
       toast.success("Connexion réussie");
@@ -44,14 +52,20 @@ export function LoginPage() {
       console.error(error);
 
       if (error instanceof Error && error.message === "invalid_credentials") {
+        setFormError("Email ou mot de passe incorrect.");
         toast.error("Identifiants incorrects");
       } else if (error instanceof Error && error.message === "missing_email") {
+        setFormError("Veuillez renseigner votre email.");
         toast.error("Email manquant");
       } else if (error instanceof Error && error.message === "missing_password") {
+        setFormError("Veuillez renseigner votre mot de passe.");
         toast.error("Mot de passe manquant");
       } else {
+        setFormError("Une erreur est survenue lors de la connexion.");
         toast.error("Erreur de connexion");
       }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -73,6 +87,13 @@ export function LoginPage() {
 
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
+              {formError && (
+                <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  <AlertCircle className="size-4 mt-0.5 shrink-0" />
+                  <span>{formError}</span>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -82,24 +103,50 @@ export function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="rounded-xl"
+                  disabled={isSubmitting}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="password">Mot de passe</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="rounded-xl"
-                />
+
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={isPasswordVisible ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="rounded-xl pr-12"
+                    disabled={isSubmitting}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => setIsPasswordVisible((prev) => !prev)}
+                    className="absolute inset-y-0 right-0 flex items-center pr-4 text-muted-foreground hover:text-foreground"
+                    aria-label={
+                      isPasswordVisible
+                        ? "Masquer le mot de passe"
+                        : "Afficher le mot de passe"
+                    }
+                  >
+                    {isPasswordVisible ? (
+                      <EyeOff className="size-4" />
+                    ) : (
+                      <Eye className="size-4" />
+                    )}
+                  </button>
+                </div>
               </div>
 
-              <Button type="submit" className="w-full rounded-full h-12 mt-6">
+              <Button
+                type="submit"
+                className="w-full rounded-full h-12 mt-6"
+                disabled={isSubmitting}
+              >
                 <LogIn className="size-4 mr-2" />
-                Se connecter
+                {isSubmitting ? "Connexion..." : "Se connecter"}
               </Button>
             </form>
           </CardContent>
