@@ -36,122 +36,122 @@ def service_worker():
     sw_path = Path(__file__).resolve().parent.parent / "static" / "service-worker.js"
     return FileResponse(sw_path, media_type="application/javascript")
 
-@router.get("/", response_class=HTMLResponse)
-def home(request: Request):
-    # Helpers injectés dans app.state depuis main.py
-    templates = request.app.state.templates
-    pop_flash = request.app.state.pop_flash
-    tomorrow_str = request.app.state.tomorrow_str
-    menu_for_date = request.app.state.menu_for_date
-    verify_agent_link = request.app.state.verify_agent_link
+#@router.get("/", response_class=HTMLResponse)
+#def home(request: Request):
+#    # Helpers injectés dans app.state depuis main.py
+#    templates = request.app.state.templates
+#    pop_flash = request.app.state.pop_flash
+#    tomorrow_str = request.app.state.tomorrow_str
+#    menu_for_date = request.app.state.menu_for_date
+#    verify_agent_link = request.app.state.verify_agent_link
 
-    event_date = tomorrow_str()
-    tomorrow_date = date.today() + timedelta(days=1)
+#    event_date = tomorrow_str()
+#    tomorrow_date = date.today() + timedelta(days=1)
 
     # Garantir que l'event de demain existe (menu auto)
-    ensure_event_for_date(event_date, menu_for_date(tomorrow_date))
+#    ensure_event_for_date(event_date, menu_for_date(tomorrow_date))
 
-    event = get_event(event_date)
-    if not event:
-        return HTMLResponse("Event introuvable", status_code=500)
+#    event = get_event(event_date)
+#    if not event:
+#        return HTMLResponse("Event introuvable", status_code=500)
 
     # Offres actives pour demain
-    offers = list_active_offers_for_date(event_date)
-    mains = offers["mains"]
-    sides = offers["sides"]
+#    offers = list_active_offers_for_date(event_date)
+#    mains = offers["mains"]
+#    sides = offers["sides"]
 
     # Réservations (avec lignes)
-    reservations = list_reservations_with_lines(event["id"])
+#    reservations = list_reservations_with_lines(event["id"])
 
     # Flash message (affiché une seule fois)
-    flash_data = pop_flash(request)
+#    flash_data = pop_flash(request)
 
     # -------------------------
     # Lien signé (agent + date + token)
     # -------------------------
-    agent_q = request.query_params.get("agent")
-    d_q = request.query_params.get("d")
-    k_q = request.query_params.get("k")
+#    agent_q = request.query_params.get("agent")
+#    d_q = request.query_params.get("d")
+#    k_q = request.query_params.get("k")
 
-    prefill_name = ""
-    name_locked = False
-    agent_id_for_form = ""
-    d_for_form = ""
-    k_for_form = ""
+#    prefill_name = ""
+#    name_locked = False
+#    agent_id_for_form = ""
+#    d_for_form = ""
+#    k_for_form = ""
 
-    if agent_q and d_q and k_q:
-        try:
-            aid = int(agent_q)
+#    if agent_q and d_q and k_q:
+#        try:
+#            aid = int(agent_q)
 
             # Important: la date du lien doit matcher l'event affiché
-            if d_q == event_date and verify_agent_link(aid, d_q, k_q):
-                agents_all = list_agents(active_only=False)
-                agent = next((a for a in agents_all if a["id"] == aid), None)
-                if agent:
-                    prefill_name = agent["name"]
-                    name_locked = True
+#            if d_q == event_date and verify_agent_link(aid, d_q, k_q):
+#                agents_all = list_agents(active_only=False)
+#                agent = next((a for a in agents_all if a["id"] == aid), None)
+#                if agent:
+#                    prefill_name = agent["name"]
+#                    name_locked = True
 
-                    agent_id_for_form = str(aid)
-                    d_for_form = d_q
-                    k_for_form = k_q
-        except Exception:
-            pass
+#                    agent_id_for_form = str(aid)
+#                    d_for_form = d_q
+#                    k_for_form = k_q
+#        except Exception:
+#            pass
 
-    from_link = bool(name_locked)
-    no_offers = (len(mains) == 0 and len(sides) == 0)
+#    from_link = bool(name_locked)
+#    no_offers = (len(mains) == 0 and len(sides) == 0)
 
     # Déjà réservé ? (seulement si lien valide + nom sûr)
-    already_reserved = False
-    if from_link and prefill_name:
-        already_reserved = reservation_exists_for_event(event["id"], prefill_name)
+#    already_reserved = False
+#    if from_link and prefill_name:
+#        already_reserved = reservation_exists_for_event(event["id"], prefill_name)
 
     # -------------------------
     # Message unique (remplace le form)
     # -------------------------
-    reserve_reason = None
-    reserve_message = None
+#    reserve_reason = None
+#    reserve_message = None
 
     # Priorités: planned -> open -> secure -> already -> no_offers
-    if not event.get("is_planned", True):
-        reserve_reason = "not_planned"
-        reserve_message = "Pas de petit-déjeuner prévu demain."
-    elif not event["open"]:
-        reserve_reason = "closed"
-        reserve_message = "Réservations fermées."
-    elif not from_link:
-        reserve_reason = "secure"
-        reserve_message = "Accès sécurisé requis : utilise le lien WhatsApp reçu."
-    elif already_reserved:
-        reserve_reason = "already"
-        reserve_message = "Tu as déjà réservé pour demain 🙂"
-    elif no_offers:
-        reserve_reason = "no_offers"
-        reserve_message = "Aucune offre n’est définie pour demain."
+#    if not event.get("is_planned", True):
+#        reserve_reason = "not_planned"
+#        reserve_message = "Pas de petit-déjeuner prévu demain."
+#    elif not event["open"]:
+#        reserve_reason = "closed"
+#        reserve_message = "Réservations fermées."
+#    elif not from_link:
+#        reserve_reason = "secure"
+#        reserve_message = "Accès sécurisé requis : utilise le lien WhatsApp reçu."
+#    elif already_reserved:
+#        reserve_reason = "already"
+#        reserve_message = "Tu as déjà réservé pour demain 🙂"
+#    elif no_offers:
+#        reserve_reason = "no_offers"
+#        reserve_message = "Aucune offre n’est définie pour demain."
 
-    can_reserve = (reserve_reason is None)
+#    can_reserve = (reserve_reason is None)
 
-    return templates.TemplateResponse(
-        request,
-        "home.html",
-        {
-            "event": event,
-            "reservations": reservations,
-            "mains": mains,
-            "sides": sides,
-            "flash": flash_data,
-            "prefill_name": prefill_name,
-            "name_locked": name_locked,
-            "agent_id": agent_id_for_form,
-            "d": d_for_form,
-            "k": k_for_form,
-            "from_link": from_link,
-            "can_reserve": can_reserve,
-            "reserve_reason": reserve_reason,
-            "reserve_message": reserve_message,
-            "already_reserved": already_reserved,
-            "no_offers": no_offers,
-        },
-    )
+#    return templates.TemplateResponse(
+#        request,
+#        "home.html",
+#        {
+#            "event": event,
+#            "reservations": reservations,
+#            "mains": mains,
+#            "sides": sides,
+#            "flash": flash_data,
+#            "prefill_name": prefill_name,
+#            "name_locked": name_locked,
+#            "agent_id": agent_id_for_form,
+#            "d": d_for_form,
+#            "k": k_for_form,
+#            "from_link": from_link,
+#            "can_reserve": can_reserve,
+#            "reserve_reason": reserve_reason,
+#            "reserve_message": reserve_message,
+#            "already_reserved": already_reserved,
+#            "no_offers": no_offers,
+#        },
+#    )
 
 
 @router.post("/reserve")
