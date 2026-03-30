@@ -24,6 +24,7 @@ from app.db import init_db
 from app.routers.public import router as public_router
 from app.routers.admin import router as admin_router
 
+from pathlib import Path
 
 # -------------------------
 # App / config
@@ -134,7 +135,11 @@ app.include_router(public_router)
 # Admin: "/admin/..."
 app.include_router(admin_router)
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
 
+if FRONTEND_DIST.exists():
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIST), html=True), name="frontend")
 # -------------------------
 # Startup
 # -------------------------
