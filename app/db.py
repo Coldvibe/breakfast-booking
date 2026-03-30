@@ -238,6 +238,30 @@ def init_db() -> None:
             conn.execute("ALTER TABLE users ADD COLUMN created_at TEXT NOT NULL DEFAULT (datetime('now'))")
         except Exception:
             pass
+                try:
+            conn.execute("ALTER TABLE users ADD COLUMN is_approved INTEGER NOT NULL DEFAULT 1")
+        except Exception:
+            pass
+
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN approved_at TEXT")
+        except Exception:
+            pass
+
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN approved_by INTEGER")
+        except Exception:
+            pass
+
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN rejected_at TEXT")
+        except Exception:
+            pass
+
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN rejected_by INTEGER")
+        except Exception:
+            pass    
 
 
 # -------------------------
@@ -467,7 +491,7 @@ def list_users(active_only: bool = False) -> List[Dict[str, Any]]:
         if active_only:
             rows = conn.execute(
                 """
-                SELECT id, name, email, phone, role, service, image_url, is_active, created_at
+                SELECT id, name, email, phone, role, service, image_url, is_active, created_at, is_approved, approved_at, approved_by, rejected_at, rejected_by
                 FROM users
                 WHERE is_active = 1
                 ORDER BY name COLLATE NOCASE
@@ -476,7 +500,7 @@ def list_users(active_only: bool = False) -> List[Dict[str, Any]]:
         else:
             rows = conn.execute(
                 """
-                SELECT id, name, email, phone, role, service, image_url, is_active, created_at
+                SELECT id, name, email, phone, role, service, image_url, is_active, created_at, is_approved, approved_at, approved_by, rejected_at, rejected_by
                 FROM users
                 ORDER BY name COLLATE NOCASE
                 """
@@ -493,6 +517,11 @@ def list_users(active_only: bool = False) -> List[Dict[str, Any]]:
                 "image_url": r["image_url"],
                 "is_active": bool(r["is_active"]),
                 "created_at": r["created_at"],
+                "is_approved": bool(r["is_approved"]),
+                "approved_at": r["approved_at"],
+                "approved_by": r["approved_by"],
+                "rejected_at": r["rejected_at"],
+                "rejected_by": r["rejected_by"],
             }
             for r in rows
         ]
@@ -507,6 +536,8 @@ def add_user(
     service: str = "",
     image_url: str = "",
     is_active: bool = True,
+    is_active: bool = True,
+    is_approved: bool = True,
 ) -> None:
     clean_name = name.strip()
     clean_email = email.strip().lower()
@@ -528,9 +559,9 @@ def add_user(
         conn.execute(
             """
             INSERT INTO users (
-                name, email, phone, password_hash, role, service, image_url, is_active
+                name, email, phone, password_hash, role, service, image_url, is_active, is_approved
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 clean_name,
@@ -541,6 +572,7 @@ def add_user(
                 clean_service,
                 clean_image_url,
                 1 if is_active else 0,
+                1 if is_approved else 0,
             ),
         )
 def set_user_active(user_id: int, is_active: bool) -> None:
