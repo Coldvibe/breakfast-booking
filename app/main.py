@@ -137,9 +137,20 @@ app.include_router(admin_router)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
+FRONTEND_ASSETS = FRONTEND_DIST / "assets"
 
-if FRONTEND_DIST.exists():
-    app.mount("/", StaticFiles(directory=str(FRONTEND_DIST), html=True), name="frontend")
+if FRONTEND_ASSETS.exists():
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_ASSETS)), name="frontend-assets")
+
+
+@app.get("/{full_path:path}")
+def frontend_app(full_path: str):
+    index_file = FRONTEND_DIST / "index.html"
+
+    if index_file.exists():
+        return FileResponse(index_file)
+
+    return {"detail": "Frontend not built"}
 # -------------------------
 # Startup
 # -------------------------
