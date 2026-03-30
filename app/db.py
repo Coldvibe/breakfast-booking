@@ -25,15 +25,13 @@ def init_db() -> None:
             """
         )
 
-        # --- migration safe: ajout du flag "is_planned" (petit-déj prévu ?) ---
-        # 1 = prévu, 0 = pas de petit-déj
         try:
             conn.execute(
                 "ALTER TABLE events ADD COLUMN is_planned INTEGER NOT NULL DEFAULT 1"
             )
         except Exception:
-            # colonne déjà existante -> OK
             pass
+
         try:
             conn.execute(
                 "ALTER TABLE events ADD COLUMN breakfast_price REAL NOT NULL DEFAULT 2.5"
@@ -54,6 +52,7 @@ def init_db() -> None:
             );
             """
         )
+
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS agents (
@@ -66,6 +65,7 @@ def init_db() -> None:
             );
             """
         )
+
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS shifts (
@@ -77,6 +77,7 @@ def init_db() -> None:
             );
             """
         )
+
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS cash_transactions (
@@ -111,20 +112,26 @@ def init_db() -> None:
             );
             """
         )
+
         try:
             conn.execute(
                 "ALTER TABLE foods ADD COLUMN is_side INTEGER NOT NULL DEFAULT 0"
             )
         except Exception:
             pass
+
         try:
-            conn.execute("ALTER TABLE foods ADD COLUMN low_stock_threshold REAL NOT NULL DEFAULT 0")
+            conn.execute(
+                "ALTER TABLE foods ADD COLUMN low_stock_threshold REAL NOT NULL DEFAULT 0"
+            )
         except Exception:
             pass
+
         try:
             conn.execute("ALTER TABLE foods ADD COLUMN image_url TEXT")
         except Exception:
-            pass        
+            pass
+
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS recipes (
@@ -134,12 +141,12 @@ def init_db() -> None:
             );
             """
         )
+
         try:
-            conn.execute(
-                "ALTER TABLE recipes ADD COLUMN image_url TEXT"
-            )
+            conn.execute("ALTER TABLE recipes ADD COLUMN image_url TEXT")
         except Exception:
             pass
+
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS recipe_ingredients (
@@ -153,17 +160,17 @@ def init_db() -> None:
             );
             """
         )
+
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS offers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                offer_date TEXT NOT NULL,                 -- YYYY-MM-DD
-                offer_type TEXT NOT NULL,                 -- 'MAIN' or 'SIDE'
-                recipe_id INTEGER,                        -- si MAIN
-                food_id INTEGER,                          -- si SIDE
+                offer_date TEXT NOT NULL,
+                offer_type TEXT NOT NULL,
+                recipe_id INTEGER,
+                food_id INTEGER,
                 max_per_person INTEGER NOT NULL DEFAULT 1,
                 is_active INTEGER NOT NULL DEFAULT 1,
-
                 CHECK (offer_type IN ('MAIN','SIDE')),
                 CHECK (
                   (offer_type='MAIN' AND recipe_id IS NOT NULL AND food_id IS NULL) OR
@@ -173,6 +180,7 @@ def init_db() -> None:
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_offers_date ON offers(offer_date);")
+
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS reservation_lines (
@@ -185,8 +193,13 @@ def init_db() -> None:
             );
             """
         )
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_res_lines_res ON reservation_lines(reservation_id);")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_res_lines_offer ON reservation_lines(offer_id);")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_res_lines_res ON reservation_lines(reservation_id);"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_res_lines_offer ON reservation_lines(offer_id);"
+        )
+
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS users (
@@ -199,11 +212,17 @@ def init_db() -> None:
                 service TEXT NOT NULL DEFAULT '',
                 image_url TEXT NOT NULL DEFAULT '',
                 is_active INTEGER NOT NULL DEFAULT 1,
+                is_approved INTEGER NOT NULL DEFAULT 1,
+                approved_at TEXT,
+                approved_by INTEGER,
+                rejected_at TEXT,
+                rejected_by INTEGER,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 CHECK (role IN ('admin', 'gestionnaire', 'utilisateur'))
             );
             """
         )
+
         try:
             conn.execute("ALTER TABLE users ADD COLUMN phone TEXT NOT NULL DEFAULT ''")
         except Exception:
@@ -238,7 +257,8 @@ def init_db() -> None:
             conn.execute("ALTER TABLE users ADD COLUMN created_at TEXT NOT NULL DEFAULT (datetime('now'))")
         except Exception:
             pass
-                try:
+
+        try:
             conn.execute("ALTER TABLE users ADD COLUMN is_approved INTEGER NOT NULL DEFAULT 1")
         except Exception:
             pass
@@ -261,7 +281,7 @@ def init_db() -> None:
         try:
             conn.execute("ALTER TABLE users ADD COLUMN rejected_by INTEGER")
         except Exception:
-            pass    
+            pass
 
 
 # -------------------------
@@ -336,7 +356,6 @@ def toggle_event_open(event_id: int) -> None:
 
 
 def toggle_event_planned(event_id: int) -> None:
-    """ON/OFF: petit-déj prévu demain."""
     with get_conn() as conn:
         conn.execute(
             "UPDATE events SET is_planned = CASE is_planned WHEN 1 THEN 0 ELSE 1 END WHERE id = ?",
@@ -345,12 +364,12 @@ def toggle_event_planned(event_id: int) -> None:
 
 
 def set_event_planned(event_id: int, is_planned: bool) -> None:
-    """Setter explicite (optionnel mais pratique)."""
     with get_conn() as conn:
         conn.execute(
             "UPDATE events SET is_planned = ? WHERE id = ?",
             (1 if is_planned else 0, event_id),
         )
+
 
 # -------------------------
 # RESERVATIONS (legacy list)
@@ -482,6 +501,7 @@ def update_agent(agent_id: int, name: str, phone: str, whatsapp_optin: bool, is_
             (clean_name, clean_phone, 1 if whatsapp_optin else 0, 1 if is_active else 0, agent_id),
         )
 
+
 # -------------------------
 # USERS
 # -------------------------
@@ -491,7 +511,8 @@ def list_users(active_only: bool = False) -> List[Dict[str, Any]]:
         if active_only:
             rows = conn.execute(
                 """
-                SELECT id, name, email, phone, role, service, image_url, is_active, created_at, is_approved, approved_at, approved_by, rejected_at, rejected_by
+                SELECT id, name, email, phone, role, service, image_url, is_active, created_at,
+                       is_approved, approved_at, approved_by, rejected_at, rejected_by
                 FROM users
                 WHERE is_active = 1
                 ORDER BY name COLLATE NOCASE
@@ -500,11 +521,45 @@ def list_users(active_only: bool = False) -> List[Dict[str, Any]]:
         else:
             rows = conn.execute(
                 """
-                SELECT id, name, email, phone, role, service, image_url, is_active, created_at, is_approved, approved_at, approved_by, rejected_at, rejected_by
+                SELECT id, name, email, phone, role, service, image_url, is_active, created_at,
+                       is_approved, approved_at, approved_by, rejected_at, rejected_by
                 FROM users
                 ORDER BY name COLLATE NOCASE
                 """
             ).fetchall()
+
+        return [
+            {
+                "id": r["id"],
+                "name": r["name"],
+                "email": r["email"],
+                "phone": r["phone"],
+                "role": r["role"],
+                "service": r["service"],
+                "image_url": r["image_url"],
+                "is_active": bool(r["is_active"]),
+                "created_at": r["created_at"],
+                "is_approved": bool(r["is_approved"]),
+                "approved_at": r["approved_at"],
+                "approved_by": r["approved_by"],
+                "rejected_at": r["rejected_at"],
+                "rejected_by": r["rejected_by"],
+            }
+            for r in rows
+        ]
+
+
+def list_pending_users() -> List[Dict[str, Any]]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, name, email, phone, role, service, image_url, is_active, created_at,
+                   is_approved, approved_at, approved_by, rejected_at, rejected_by
+            FROM users
+            WHERE is_approved = 0
+            ORDER BY created_at DESC
+            """
+        ).fetchall()
 
         return [
             {
@@ -535,7 +590,6 @@ def add_user(
     role: str = "utilisateur",
     service: str = "",
     image_url: str = "",
-    is_active: bool = True,
     is_active: bool = True,
     is_approved: bool = True,
 ) -> None:
@@ -575,18 +629,56 @@ def add_user(
                 1 if is_approved else 0,
             ),
         )
+
+
+def approve_user(user_id: int, approved_by: int) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            """
+            UPDATE users
+            SET is_approved = 1,
+                approved_at = datetime('now'),
+                approved_by = ?,
+                rejected_at = NULL,
+                rejected_by = NULL,
+                is_active = 1
+            WHERE id = ?
+            """,
+            (approved_by, user_id),
+        )
+
+
+def reject_user(user_id: int, rejected_by: int) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            """
+            UPDATE users
+            SET is_active = 0,
+                is_approved = 0,
+                rejected_at = datetime('now'),
+                rejected_by = ?
+            WHERE id = ?
+            """,
+            (rejected_by, user_id),
+        )
+
+
 def set_user_active(user_id: int, is_active: bool) -> None:
     with get_conn() as conn:
         conn.execute(
             "UPDATE users SET is_active = ? WHERE id = ?",
             (1 if is_active else 0, user_id),
-        ) 
+        )
+
+
 def delete_user(user_id: int) -> None:
     with get_conn() as conn:
         conn.execute(
             "DELETE FROM users WHERE id = ?",
             (user_id,),
-        )               
+        )
+
+
 # -------------------------
 # SHIFTS
 # -------------------------
@@ -634,9 +726,6 @@ def list_working_agents_for_date(shift_date: str) -> List[Dict[str, Any]]:
             }
             for r in rows
         ]
-
-
-
 
 
 # -------------------------
@@ -909,7 +998,13 @@ def list_reservations_with_lines(event_id: int) -> list[dict]:
             out.append(by_id[rid])
 
         if row["label"] is not None and row["qty"] is not None:
-            by_id[rid]["lines"].append({"label": row["label"], "qty": int(row["qty"]), "type": row["offer_type"]})
+            by_id[rid]["lines"].append(
+                {
+                    "label": row["label"],
+                    "qty": int(row["qty"]),
+                    "type": row["offer_type"],
+                }
+            )
 
     return out
 
@@ -929,6 +1024,7 @@ def reservation_exists_for_event(event_id: int, name: str) -> bool:
         ).fetchone()
         return row is not None
 
+
 def get_recipe(recipe_id: int) -> dict | None:
     with get_conn() as conn:
         r = conn.execute(
@@ -938,11 +1034,9 @@ def get_recipe(recipe_id: int) -> dict | None:
         if not r:
             return None
         return {"id": r["id"], "name": r["name"], "is_active": bool(r["is_active"])}
+
+
 def get_tomorrow_admin_snapshot(event_date: str) -> dict:
-    """
-    Snapshot "cockpit admin" pour une date donnée (en pratique : demain).
-    Centralise les données utiles au dashboard admin.
-    """
     event = get_event(event_date)
 
     offers = list_active_offers_for_date(event_date)
@@ -1002,6 +1096,7 @@ def get_tomorrow_admin_snapshot(event_date: str) -> dict:
 
     return snapshot
 
+
 def update_recipe(recipe_id: int, name: str, is_active: bool) -> None:
     clean_name = name.strip()
     if not clean_name:
@@ -1016,6 +1111,8 @@ def update_recipe(recipe_id: int, name: str, is_active: bool) -> None:
             """,
             (clean_name, 1 if is_active else 0, recipe_id),
         )
+
+
 def update_event_flags(event_date: str, open_value: int = None, is_planned_value: int = None) -> None:
     fields = []
     values = []
@@ -1042,13 +1139,15 @@ def update_event_flags(event_date: str, open_value: int = None, is_planned_value
     with get_conn() as conn:
         conn.execute(query, values)
 
+
 def delete_offer(offer_id: int) -> None:
     with get_conn() as conn:
         conn.execute(
             "DELETE FROM offers WHERE id = ?",
             (offer_id,),
         )
-        
+
+
 def update_user(
     user_id: int,
     name: str,
@@ -1066,7 +1165,8 @@ def update_user(
             WHERE id = ?
             """,
             (name, email, phone, role, service, image_url, user_id),
-        )   
+        )
+
 
 def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
     clean_email = email.strip().lower()
@@ -1074,7 +1174,8 @@ def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
     with get_conn() as conn:
         row = conn.execute(
             """
-            SELECT id, name, email, phone, password_hash, role, service, image_url, is_active, created_at
+            SELECT id, name, email, phone, password_hash, role, service, image_url,
+                   is_active, created_at, is_approved, approved_at, approved_by, rejected_at, rejected_by
             FROM users
             WHERE lower(trim(email)) = ?
             LIMIT 1
@@ -1096,7 +1197,13 @@ def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
             "image_url": row["image_url"],
             "is_active": bool(row["is_active"]),
             "created_at": row["created_at"],
+            "is_approved": bool(row["is_approved"]),
+            "approved_at": row["approved_at"],
+            "approved_by": row["approved_by"],
+            "rejected_at": row["rejected_at"],
+            "rejected_by": row["rejected_by"],
         }
+
 
 def authenticate_user(email: str, password_hash: str) -> Optional[Dict[str, Any]]:
     user = get_user_by_email(email)
@@ -1104,13 +1211,23 @@ def authenticate_user(email: str, password_hash: str) -> Optional[Dict[str, Any]
     if not user:
         return None
 
-    if not user["is_active"]:
-        return None
-
     if user["password_hash"] != password_hash:
         return None
 
-    return user             
+    if not user["is_active"]:
+        return {
+            **user,
+            "_auth_error": "inactive",
+        }
+
+    if not user["is_approved"]:
+        return {
+            **user,
+            "_auth_error": "not_approved",
+        }
+
+    return user
+
 
 def delete_reservation_for_event_and_name(event_id: int, name: str) -> None:
     clean_name = name.strip().lower()
@@ -1141,6 +1258,7 @@ def delete_reservation_for_event_and_name(event_id: int, name: str) -> None:
             (reservation_id,),
         )
 
+
 def set_event_breakfast_price(event_date: str, breakfast_price: float) -> None:
     with get_conn() as conn:
         conn.execute(
@@ -1151,6 +1269,8 @@ def set_event_breakfast_price(event_date: str, breakfast_price: float) -> None:
             """,
             (float(breakfast_price), event_date),
         )
+
+
 # -------------------------
 # CASH / TRÉSORERIE
 # -------------------------
