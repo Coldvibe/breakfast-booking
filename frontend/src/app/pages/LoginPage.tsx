@@ -62,7 +62,7 @@ export function LoginPage() {
           <div className="inline-flex items-center justify-center size-20 rounded-2xl bg-primary/10 mb-4">
             <Coffee className="size-10 text-primary" />
           </div>
-          <h1 className="text-3xl font-bold mb-2">Petit Déjeuner</h1>
+          <h1 className="text-3xl font-bold mb-2">Zack & Snack</h1>
           <p className="text-muted-foreground">Connectez-vous à votre espace</p>
         </div>
 
