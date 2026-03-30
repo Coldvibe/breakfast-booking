@@ -15,6 +15,7 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/stats": { title: "Statistiques", subtitle: "Analyses et données" },
   "/settings": { title: "Paramètres", subtitle: "Configuration" },
   "/reservations": { title: "Réservations", subtitle: "Consultez les réservations de demain" },
+  "/cash": { title: "Trésorerie", subtitle: "Gérez la caisse et les mouvements" },
 };
 
 export function Layout() {

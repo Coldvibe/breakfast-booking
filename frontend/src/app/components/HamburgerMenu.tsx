@@ -21,9 +21,11 @@ import {
   ClipboardList,
   Users,
   History,
+  Wallet,
 } from "lucide-react";
 import { Separator } from "./ui/separator";
 import { useAuth } from "../context/AuthContext";
+
 
 const ADMIN_MENU_ITEMS = [
   {
@@ -55,6 +57,12 @@ const ADMIN_MENU_ITEMS = [
     icon: Users,
     label: "Utilisateurs",
     description: "Gérer les utilisateurs",
+  },
+  {
+    path: "/cash",
+    icon: Wallet,
+    label: "Trésorerie",
+    description: "Gérer la caisse",
   },
   {
     path: "/history",

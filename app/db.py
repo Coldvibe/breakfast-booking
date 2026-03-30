@@ -79,6 +79,30 @@ def init_db() -> None:
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS cash_transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                transaction_date TEXT NOT NULL,
+                amount REAL NOT NULL,
+                transaction_type TEXT NOT NULL,
+                category TEXT NOT NULL,
+                label TEXT NOT NULL DEFAULT '',
+                reservation_id INTEGER,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                CHECK (transaction_type IN ('income', 'expense')),
+                CHECK (category IN ('reservation_payment', 'manual_income', 'manual_expense')),
+                FOREIGN KEY(reservation_id) REFERENCES reservations(id)
+            );
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cash_transactions_date ON cash_transactions(transaction_date);"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cash_transactions_reservation ON cash_transactions(reservation_id);"
+        )
+
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS foods (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE,
@@ -1095,3 +1119,87 @@ def set_event_breakfast_price(event_date: str, breakfast_price: float) -> None:
             """,
             (float(breakfast_price), event_date),
         )
+# -------------------------
+# CASH / TRÉSORERIE
+# -------------------------
+
+def add_cash_transaction(
+    transaction_date: str,
+    amount: float,
+    transaction_type: str,
+    category: str,
+    label: str = "",
+    reservation_id: int | None = None,
+) -> int:
+    with get_conn() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO cash_transactions (
+                transaction_date, amount, transaction_type, category, label, reservation_id
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                transaction_date,
+                float(amount),
+                transaction_type,
+                category,
+                label.strip(),
+                reservation_id,
+            ),
+        )
+        return int(cur.lastrowid)
+
+
+def list_cash_transactions(limit: int = 100) -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                id,
+                transaction_date,
+                amount,
+                transaction_type,
+                category,
+                label,
+                reservation_id,
+                created_at
+            FROM cash_transactions
+            ORDER BY transaction_date DESC, id DESC
+            LIMIT ?
+            """,
+            (int(limit),),
+        ).fetchall()
+
+    return [
+        {
+            "id": r["id"],
+            "transaction_date": r["transaction_date"],
+            "amount": float(r["amount"] or 0),
+            "transaction_type": r["transaction_type"],
+            "category": r["category"],
+            "label": r["label"] or "",
+            "reservation_id": r["reservation_id"],
+            "created_at": r["created_at"],
+        }
+        for r in rows
+    ]
+
+
+def get_cash_balance() -> float:
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT
+                COALESCE(SUM(
+                    CASE
+                        WHEN transaction_type = 'income' THEN amount
+                        WHEN transaction_type = 'expense' THEN -amount
+                        ELSE 0
+                    END
+                ), 0) AS balance
+            FROM cash_transactions
+            """
+        ).fetchone()
+
+    return float(row["balance"] or 0)

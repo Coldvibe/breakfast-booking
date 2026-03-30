@@ -10,6 +10,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { EmployeeMenuPage } from "./pages/EmployeeMenuPage";
 import { UsersPage } from "./pages/UsersPage";
 import { ReservationsPage } from "./pages/ReservationsPage";
+import { CashPage } from "./pages/CashPage";
 
 export const router = createBrowserRouter([
   {
@@ -32,6 +33,7 @@ export const router = createBrowserRouter([
       { path: "settings", Component: SettingsPage },
       { path: "users", Component: UsersPage },
       { path: "reservations", Component: ReservationsPage },
+      { path: "cash", Component: CashPage },
     ],
   },
 ]);
