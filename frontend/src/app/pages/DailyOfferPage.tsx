@@ -7,9 +7,11 @@ import { Label } from "../components/ui/label";
 import { Badge } from "../components/ui/badge";
 import { Plus, Minus } from "lucide-react";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
+import { toast } from "sonner";
 import type { SelectedItem } from "../types";
+import { Input } from "../components/ui/input";
 
-import { saveDailyOfferState } from "../lib/api";
+import { saveDailyOfferState,fetchBreakfastPrice, updateBreakfastPrice } from "../lib/api";
 
 export function DailyOfferPage() {
   const { recipes, ingredients, dailyOffers, replaceBackendState } = useApp();
@@ -31,6 +33,8 @@ export function DailyOfferPage() {
   const isSyncingFromBackend = useRef(false);
   const lastSavedPayloadRef = useRef("");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [breakfastPrice, setBreakfastPrice] = useState("2.5");
+  const [isSavingPrice, setIsSavingPrice] = useState(false);
 
   const existingOffer = dailyOffers.find((offer) => offer.date === tomorrow);
 
@@ -74,7 +78,18 @@ export function DailyOfferPage() {
 
     return () => clearTimeout(timeout);
   }, [existingOffer]);
+  useEffect(() => {
+    const loadBreakfastPrice = async () => {
+      try {
+        const data = await fetchBreakfastPrice();
+        setBreakfastPrice(String(data.breakfastPrice ?? 2.5));
+      } catch (error) {
+        console.error(error);
+      }
+    };
 
+    loadBreakfastPrice();
+  }, [tomorrow]);
   useEffect(() => {
     if (saveStatus !== "saved") return;
 
@@ -145,7 +160,40 @@ export function DailyOfferPage() {
 
     return () => clearTimeout(timeout);
   }, [selectedMainDishes, selectedAccompaniments]);
+const handleSaveBreakfastPrice = async () => {
+  const parsedPrice = parseFloat(breakfastPrice);
 
+  if (Number.isNaN(parsedPrice)) {
+    toast.error("Prix invalide");
+    return;
+  }
+
+  if (parsedPrice <= 0) {
+    toast.error("Le prix doit être supérieur à 0");
+    return;
+  }
+
+  try {
+    setIsSavingPrice(true);
+    const data = await updateBreakfastPrice(parsedPrice);
+    setBreakfastPrice(String(data.breakfastPrice));
+    toast.success("Prix du petit-déjeuner mis à jour");
+  } catch (error) {
+    console.error(error);
+
+    if (error instanceof Error && error.message === "missing_breakfast_price") {
+      toast.error("Prix manquant");
+    } else if (error instanceof Error && error.message === "invalid_breakfast_price") {
+      toast.error("Prix invalide");
+    } else if (error instanceof Error && error.message === "negative_or_zero_breakfast_price") {
+      toast.error("Le prix doit être supérieur à 0");
+    } else {
+      toast.error("Erreur lors de la mise à jour du prix");
+    }
+  } finally {
+    setIsSavingPrice(false);
+  }
+};
 const mainDishRecipes = recipes.filter((r) => r.category === "principal");
 const accompanimentRecipes = ingredients.filter((ingredient) => ingredient.isSide);
 
@@ -285,6 +333,51 @@ const accompanimentRecipes = ingredients.filter((ingredient) => ingredient.isSid
         <>
           {/* Plats principaux */}
           <div className="space-y-4">
+            <div className="pt-4 border-t mt-4">
+              <div className="rounded-2xl bg-muted/40 border border-border/50 p-4">
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div className="flex items-start gap-3 min-w-0 flex-1">
+                    <div className="flex items-center justify-center size-10 rounded-xl bg-primary/10 text-primary font-semibold">
+                      €
+                    </div>
+
+                    <div className="min-w-0">
+                      <Label className="text-base font-semibold block">
+                        Prix du petit-déjeuner
+                      </Label>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Prix appliqué aux réservations de demain. Le prix de la veille est repris automatiquement.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <div className="relative w-full sm:w-32">
+                      <Input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={breakfastPrice}
+                        onChange={(e) => setBreakfastPrice(e.target.value)}
+                        className="rounded-xl pr-8 text-right font-medium"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                        €
+                      </span>
+                    </div>
+
+                    <Button
+                      type="button"
+                      className="rounded-full"
+                      onClick={handleSaveBreakfastPrice}
+                      disabled={isSavingPrice}
+                    >
+                      {isSavingPrice ? "..." : "Enregistrer"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
             <h3 className="text-lg font-semibold">Plats principaux</h3>
             {mainDishRecipes.length === 0 ? (
               <Card className="rounded-2xl border-0 shadow-sm">

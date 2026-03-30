@@ -12,13 +12,45 @@ import {
   deleteEmployeeReservation,
   fetchEmployeeReservation,
   saveEmployeeReservation,
+  fetchEmployeeBreakfastInfo,
 } from "../lib/api";
 
 export function EmployeeMenuPage() {
   const { recipes, ingredients, dailyOffers } = useApp();
   const { user, logout, isAuthLoading } = useAuth();
   const navigate = useNavigate();
+  const [breakfastPrice, setBreakfastPrice] = useState<number>(2.5);
+  const [paymentMessage, setPaymentMessage] = useState(
+    "Le paiement se fera par Payconiq le jour du petit-déjeuner."
+  );
+  const formatPrice = (price: number) => {
+    return price.toFixed(2).replace(".", ",");
+  };
+  const tomorrow = useMemo(() => {
+    const date = new Date();
+    date.setDate(date.getDate() + 1);
+    return date.toISOString().split("T")[0];
+  }, []);
+  useEffect(() => {
+    if (isAuthLoading) return;
+    if (!user) return;
+    if (user.role !== "utilisateur") return;
 
+    const loadBreakfastInfo = async () => {
+      try {
+        const data = await fetchEmployeeBreakfastInfo();
+        setBreakfastPrice(Number(data.breakfastPrice ?? 2.5));
+        setPaymentMessage(
+          data.paymentMessage ||
+            "Le paiement se fera par Payconiq le jour du petit-déjeuner."
+        );
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    loadBreakfastInfo();
+  }, [user, isAuthLoading, tomorrow]);
   useEffect(() => {
     if (isAuthLoading) return;
 
@@ -31,12 +63,6 @@ export function EmployeeMenuPage() {
       navigate("/", { replace: true });
     }
   }, [user, isAuthLoading, navigate]);
-
-  const tomorrow = useMemo(() => {
-    const date = new Date();
-    date.setDate(date.getDate() + 1);
-    return date.toISOString().split("T")[0];
-  }, []);
 
   const todayOffer = dailyOffers.find((offer) => offer.date === tomorrow);
 
@@ -290,7 +316,30 @@ export function EmployeeMenuPage() {
               </p>
             </CardContent>
           </Card>
+          <Card className="rounded-2xl border-0 shadow-sm bg-card">
+            <CardContent className="p-5">
+              <div className="flex items-start gap-3">
+                <div className="flex items-center justify-center size-10 rounded-xl bg-primary/10 text-primary font-semibold">
+                  €
+                </div>
 
+                <div className="flex-1">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      <h3 className="font-semibold text-base">Prix du petit-déjeuner</h3>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {paymentMessage}
+                      </p>
+                    </div>
+
+                    <Badge className="rounded-full text-sm px-3 py-1">
+                      {formatPrice(breakfastPrice)} €
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">
               Choisissez votre plat principal <span className="text-destructive">*</span>

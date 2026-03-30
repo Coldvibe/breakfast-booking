@@ -22,6 +22,7 @@ from app.db import (
     get_tomorrow_admin_snapshot,
     update_event_flags,
     set_event_planned,
+    set_event_breakfast_price,
     # agents
     list_agents,
     add_agent,
@@ -2357,3 +2358,70 @@ def api_employee_delete_reservation(request: Request):
     delete_reservation_for_event_and_name(event["id"], session_user["name"])
 
     return JSONResponse({"success": True})
+
+
+@router.get("/api/admin/breakfast-price")
+def api_admin_get_breakfast_price(request: Request):
+    event_date = _tomorrow_str()
+    ensure_event_for_date(event_date, _menu_for_tomorrow(request))
+
+    event = get_event(event_date)
+    if not event:
+        return JSONResponse({"error": "event_not_found"}, status_code=404)
+
+    return JSONResponse({
+        "date": event_date,
+        "breakfastPrice": float(event.get("breakfast_price", 2.5)),
+    })
+
+@router.patch("/api/admin/breakfast-price")
+def api_admin_update_breakfast_price(request: Request, payload: dict = Body(...)):
+    event_date = _tomorrow_str()
+    ensure_event_for_date(event_date, _menu_for_tomorrow(request))
+
+    breakfast_price = payload.get("breakfastPrice", None)
+
+    if breakfast_price is None:
+        return JSONResponse({"error": "missing_breakfast_price"}, status_code=400)
+
+    try:
+        breakfast_price_value = float(breakfast_price)
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "invalid_breakfast_price"}, status_code=400)
+
+    if breakfast_price_value <= 0:
+        return JSONResponse({"error": "negative_or_zero_breakfast_price"}, status_code=400)
+
+    set_event_breakfast_price(event_date, breakfast_price_value)
+
+    event = get_event(event_date)
+    if not event:
+        return JSONResponse({"error": "event_not_found"}, status_code=404)
+
+    return JSONResponse({
+        "success": True,
+        "date": event_date,
+        "breakfastPrice": float(event.get("breakfast_price", 2.5)),
+    })
+
+@router.get("/api/employee/breakfast-info")
+def api_employee_breakfast_info(request: Request):
+    session_user = request.session.get("user")
+    if not session_user:
+        return JSONResponse({"error": "not_authenticated"}, status_code=401)
+
+    if session_user.get("role") != "utilisateur":
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+
+    event_date = _tomorrow_str()
+    ensure_event_for_date(event_date, _menu_for_tomorrow(request))
+
+    event = get_event(event_date)
+    if not event:
+        return JSONResponse({"error": "event_not_found"}, status_code=404)
+
+    return JSONResponse({
+        "date": event_date,
+        "breakfastPrice": float(event.get("breakfast_price", 2.5)),
+        "paymentMessage": "Le paiement se fera par Payconiq le jour du petit-déjeuner.",
+    })    

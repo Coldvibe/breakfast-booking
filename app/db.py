@@ -34,6 +34,12 @@ def init_db() -> None:
         except Exception:
             # colonne déjà existante -> OK
             pass
+        try:
+            conn.execute(
+                "ALTER TABLE events ADD COLUMN breakfast_price REAL NOT NULL DEFAULT 2.5"
+            )
+        except Exception:
+            pass
 
         conn.execute(
             """
@@ -215,7 +221,9 @@ def init_db() -> None:
 # -------------------------
 
 def ensure_event_for_date(event_date: str, default_menu: List[str]) -> None:
-    """Crée l'event si absent. Par défaut: ouvert + petit-déj prévu."""
+    """Crée l'event si absent. Par défaut: ouvert + petit-déj prévu.
+    Le prix du petit-déj reprend celui de la veille si disponible, sinon 2.5.
+    """
     with get_conn() as conn:
         row = conn.execute(
             "SELECT id FROM events WHERE event_date = ?",
@@ -224,12 +232,27 @@ def ensure_event_for_date(event_date: str, default_menu: List[str]) -> None:
         if row:
             return
 
+        previous_row = conn.execute(
+            """
+            SELECT breakfast_price
+            FROM events
+            WHERE event_date < ?
+            ORDER BY event_date DESC
+            LIMIT 1
+            """,
+            (event_date,),
+        ).fetchone()
+
+        breakfast_price = 2.5
+        if previous_row and previous_row["breakfast_price"] is not None:
+            breakfast_price = float(previous_row["breakfast_price"])
+
         conn.execute(
             """
-            INSERT INTO events (event_date, menu_json, is_open, is_planned)
-            VALUES (?, ?, 1, 1)
+            INSERT INTO events (event_date, menu_json, is_open, is_planned, breakfast_price)
+            VALUES (?, ?, 1, 1, ?)
             """,
-            (event_date, json.dumps(default_menu, ensure_ascii=False)),
+            (event_date, json.dumps(default_menu, ensure_ascii=False), breakfast_price),
         )
 
 
@@ -237,7 +260,7 @@ def get_event(event_date: str) -> Optional[Dict[str, Any]]:
     with get_conn() as conn:
         row = conn.execute(
             """
-            SELECT id, event_date, menu_json, is_open, is_planned
+            SELECT id, event_date, menu_json, is_open, is_planned, breakfast_price
             FROM events
             WHERE event_date = ?
             """,
@@ -252,6 +275,7 @@ def get_event(event_date: str) -> Optional[Dict[str, Any]]:
             "menu": json.loads(row["menu_json"]),
             "open": bool(row["is_open"]),
             "is_planned": bool(row["is_planned"]),
+            "breakfast_price": float(row["breakfast_price"] or 2.5),
         }
 
 
@@ -1061,3 +1085,13 @@ def delete_reservation_for_event_and_name(event_id: int, name: str) -> None:
             (reservation_id,),
         )
 
+def set_event_breakfast_price(event_date: str, breakfast_price: float) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            """
+            UPDATE events
+            SET breakfast_price = ?
+            WHERE event_date = ?
+            """,
+            (float(breakfast_price), event_date),
+        )

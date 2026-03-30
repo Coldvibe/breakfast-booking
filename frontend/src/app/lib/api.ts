@@ -488,3 +488,56 @@ export async function deleteEmployeeReservation() {
 
   return data;
 }
+
+export async function fetchBreakfastPrice() {
+  const response = await fetch("/api/admin/breakfast-price", {
+    credentials: "include",
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || data?.detail || "Impossible de charger le prix du petit-déjeuner."
+    );
+  }
+
+  return data;
+}
+
+export async function updateBreakfastPrice(breakfastPrice: number) {
+  const response = await fetch("/api/admin/breakfast-price", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify({ breakfastPrice }),
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || data?.detail || "Impossible de mettre à jour le prix du petit-déjeuner."
+    );
+  }
+
+  return data;
+}
+
+export async function fetchEmployeeBreakfastInfo() {
+  const response = await fetch("/api/employee/breakfast-info", {
+    credentials: "include",
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || data?.detail || "Impossible de charger les informations du petit-déjeuner."
+    );
+  }
+
+  return data;
+}
