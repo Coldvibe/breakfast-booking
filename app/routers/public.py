@@ -131,9 +131,9 @@ def home(request: Request):
     can_reserve = (reserve_reason is None)
 
     return templates.TemplateResponse(
+        request,
         "home.html",
         {
-            "request": request,
             "event": event,
             "reservations": reservations,
             "mains": mains,
