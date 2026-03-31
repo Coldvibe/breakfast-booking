@@ -6,9 +6,18 @@ import { Label } from "../components/ui/label";
 import { Badge } from "../components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { Switch } from "../components/ui/switch";
-import { Plus, Phone, Mail, Trash2, Pencil, Check } from "lucide-react";
+import { Plus, Phone, Mail, Trash2, Pencil, Check, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
-import { createUser, deleteUser, fetchUsersState, updateUser, updateUserActive } from "../lib/api";
+import {
+  createUser,
+  deleteUser,
+  fetchUsersState,
+  updateUser,
+  updateUserActive,
+  fetchPendingUsers,
+  approveUser,
+  rejectUser,
+} from "../lib/api";
 
 interface User {
   id: string;
@@ -21,10 +30,24 @@ interface User {
   isActive: boolean;
 }
 
+interface PendingUser {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: "admin" | "gestionnaire" | "utilisateur";
+  service: string;
+  imageUrl: string;
+  isActive: boolean;
+  isApproved: boolean;
+  createdAt?: string;
+}
+
 const DEFAULT_ROLE: User["role"] = "utilisateur";
 
 export function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
+  const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
 
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
@@ -58,74 +81,110 @@ export function UsersPage() {
     }
   };
 
+  const loadPending = async () => {
+    try {
+      const data = await fetchPendingUsers();
+      setPendingUsers(data.users || []);
+    } catch (error) {
+      console.error(error);
+      toast.error("Erreur lors du chargement des demandes en attente");
+    }
+  };
+
   useEffect(() => {
     loadUsers();
+    loadPending();
   }, []);
 
+  const handleApprove = async (id: string) => {
+    try {
+      await approveUser(id);
+      toast.success("Utilisateur validé");
+      await loadPending();
+      await loadUsers();
+    } catch (error) {
+      console.error(error);
+      toast.error("Erreur lors de la validation");
+    }
+  };
+
+  const handleReject = async (id: string) => {
+    try {
+      await rejectUser(id);
+      toast.success("Utilisateur refusé");
+      await loadPending();
+      await loadUsers();
+    } catch (error) {
+      console.error(error);
+      toast.error("Erreur lors du refus");
+    }
+  };
+
   const handleSubmitUser = async () => {
-  if (!newName.trim()) {
-    toast.error("Veuillez remplir le nom");
-    return;
-  }
+    if (!newName.trim()) {
+      toast.error("Veuillez remplir le nom");
+      return;
+    }
 
-  if (!newEmail.trim()) {
-    toast.error("Veuillez remplir l’email");
-    return;
-  }
+    if (!newEmail.trim()) {
+      toast.error("Veuillez remplir l’email");
+      return;
+    }
 
-  try {
-    if (isEditingUser && editingUserId) {
-      await updateUser(editingUserId, {
-        name: newName.trim(),
-        email: newEmail.trim(),
-        phone: newPhone.trim(),
-        role: newRole,
-        service: newService.trim(),
-        imageUrl: newImageUrl.trim(),
-      });
+    try {
+      if (isEditingUser && editingUserId) {
+        await updateUser(editingUserId, {
+          name: newName.trim(),
+          email: newEmail.trim(),
+          phone: newPhone.trim(),
+          role: newRole,
+          service: newService.trim(),
+          imageUrl: newImageUrl.trim(),
+        });
 
-      toast.success("Utilisateur modifié");
-    } else {
-      if (!newPassword.trim()) {
-        toast.error("Veuillez remplir le mot de passe");
-        return;
+        toast.success("Utilisateur modifié");
+      } else {
+        if (!newPassword.trim()) {
+          toast.error("Veuillez remplir le mot de passe");
+          return;
+        }
+
+        await createUser({
+          name: newName.trim(),
+          email: newEmail.trim(),
+          phone: newPhone.trim(),
+          password: newPassword,
+          role: newRole,
+          service: newService.trim(),
+          imageUrl: newImageUrl.trim(),
+        });
+
+        toast.success("Utilisateur ajouté");
       }
 
-      await createUser({
-        name: newName.trim(),
-        email: newEmail.trim(),
-        phone: newPhone.trim(),
-        password: newPassword,
-        role: newRole,
-        service: newService.trim(),
-        imageUrl: newImageUrl.trim(),
-      });
+      await loadUsers();
+      await loadPending();
+      resetForm();
+    } catch (error) {
+      console.error(error);
 
-      toast.success("Utilisateur ajouté");
+      if (error instanceof Error && error.message === "missing_name") {
+        toast.error("Nom manquant");
+      } else if (error instanceof Error && error.message === "missing_email") {
+        toast.error("Email manquant");
+      } else if (error instanceof Error && error.message === "missing_password") {
+        toast.error("Mot de passe manquant");
+      } else if (error instanceof Error && error.message === "duplicate_email") {
+        toast.error("Cet email existe déjà");
+      } else if (error instanceof Error && error.message === "invalid_role") {
+        toast.error("Rôle invalide");
+      } else if (error instanceof Error && error.message === "user_not_found") {
+        toast.error("Utilisateur introuvable");
+      } else {
+        toast.error("Erreur lors de l’enregistrement de l’utilisateur");
+      }
     }
-
-    await loadUsers();
-    resetForm();
-  } catch (error) {
-    console.error(error);
-
-    if (error instanceof Error && error.message === "missing_name") {
-      toast.error("Nom manquant");
-    } else if (error instanceof Error && error.message === "missing_email") {
-      toast.error("Email manquant");
-    } else if (error instanceof Error && error.message === "missing_password") {
-      toast.error("Mot de passe manquant");
-    } else if (error instanceof Error && error.message === "duplicate_email") {
-      toast.error("Cet email existe déjà");
-    } else if (error instanceof Error && error.message === "invalid_role") {
-      toast.error("Rôle invalide");
-    } else if (error instanceof Error && error.message === "user_not_found") {
-      toast.error("Utilisateur introuvable");
-    } else {
-      toast.error("Erreur lors de l’enregistrement de l’utilisateur");
-    }
-  }
-};
+  };
 
   const toggleUserActive = async (user: User) => {
     try {
@@ -330,6 +389,90 @@ export function UsersPage() {
           )}
         </CardContent>
       </Card>
+
+      {pendingUsers.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-xl font-semibold">
+            Demandes d’inscription en attente ({pendingUsers.length})
+          </h2>
+
+          <div className="space-y-3">
+            {pendingUsers.map((user) => (
+              <Card key={user.id} className="rounded-2xl border border-amber-200 bg-amber-50/40 shadow-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-4">
+                    <Avatar className="size-12">
+                      {user.imageUrl && <AvatarImage src={user.imageUrl} alt={user.name} />}
+                      <AvatarFallback className="bg-amber-100 text-amber-700">
+                        {getInitials(user.name)}
+                      </AvatarFallback>
+                    </Avatar>
+
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between mb-2 gap-3">
+                        <div>
+                          <h4 className="font-semibold">{user.name}</h4>
+
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            <Badge variant="outline" className="rounded-full">
+                              {getRoleLabel(user.role)}
+                            </Badge>
+
+                            {user.service && (
+                              <Badge variant="secondary" className="rounded-full">
+                                {user.service}
+                              </Badge>
+                            )}
+
+                            <Badge variant="secondary" className="rounded-full">
+                              En attente
+                            </Badge>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            className="rounded-full"
+                            onClick={() => handleApprove(user.id)}
+                          >
+                            <Check className="size-4 mr-1" />
+                            Valider
+                          </Button>
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="rounded-full"
+                            onClick={() => handleReject(user.id)}
+                          >
+                            <X className="size-4 mr-1" />
+                            Refuser
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Mail className="size-3.5" />
+                          {user.email}
+                        </div>
+
+                        {user.phone && (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Phone className="size-3.5" />
+                            {user.phone}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="space-y-3">
         <h2 className="text-xl font-semibold">Utilisateurs ({users.length})</h2>

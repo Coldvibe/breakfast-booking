@@ -564,3 +564,49 @@ export async function fetchEmployeeBreakfastInfo() {
 
   return data;
 }
+
+export async function fetchPendingUsers() {
+  const response = await fetch("/api/admin/users/pending", {
+    credentials: "include",
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || data?.detail || "Impossible de charger les utilisateurs en attente."
+    );
+  }
+
+  return data;
+}
+
+export async function approveUser(userId: string) {
+  const numericId = Number(userId.replace("u-", ""));
+
+  const response = await fetch(`/api/admin/users/${numericId}/approve`, {
+    method: "PATCH",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    throw new Error("Erreur validation utilisateur");
+  }
+
+  return response.json();
+}
+
+export async function rejectUser(userId: string) {
+  const numericId = Number(userId.replace("u-", ""));
+
+  const response = await fetch(`/api/admin/users/${numericId}/reject`, {
+    method: "PATCH",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    throw new Error("Erreur refus utilisateur");
+  }
+
+  return response.json();
+}
