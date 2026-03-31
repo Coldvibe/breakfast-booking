@@ -147,7 +147,7 @@ export function DailyOfferPage() {
           accompaniments: selectedAccompaniments,
         });
 
-        replaceBackendState(data.recipes, data.dailyOffer);
+        replaceBackendState(data.recipes, data.dailyOffer, data.ingredients);
         lastSavedPayloadRef.current = payloadKey;
         setSaveStatus("saved");
 
