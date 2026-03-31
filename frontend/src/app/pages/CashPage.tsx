@@ -90,7 +90,7 @@ export function CashPage() {
             onChange={(e) => setLabel(e.target.value)}
           />
 
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <Button
               className="w-full"
               onClick={() => handleAdd("income")}
