@@ -6,7 +6,7 @@ from datetime import date, timedelta
 import urllib.parse
 from typing import Optional
 
-from fastapi import APIRouter, Form, Request,  HTTPException, Request, Body
+from fastapi import APIRouter, Form, Request,  HTTPException, Body
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 # + importe get_recipe, update_recipe
@@ -29,7 +29,6 @@ from app.db import (
     update_agent,
     set_agent_active,
     set_agent_whatsapp_optin,
-    set_working_agents_for_date,
     # shifts
     list_working_agent_ids,
     set_working_agents_for_date,
@@ -44,7 +43,6 @@ from app.db import (
     set_recipe_active,
     get_recipe,
     update_recipe,
-
     # offers
     list_offers_for_date,
     add_offer_main,
@@ -52,23 +50,22 @@ from app.db import (
     update_offer_max,
     set_offer_active,
     delete_offer,
-
-    #user
+    # users
     list_users,
+    list_pending_users,
     add_user,
+    approve_user,
+    reject_user,
     set_user_active,
     delete_user,
     update_user,
     authenticate_user,
+    # reservations
     create_reservation,
     set_reservation_lines,
     delete_reservation_for_event_and_name,
     list_active_offers_for_date,
     list_reservations_with_lines,
-    list_pending_users,
-    approve_user,
-    reject_user,
-    
 )
 
 router = APIRouter()
@@ -158,7 +155,12 @@ def admin_login_post(
     password: str = Form(...),
 ):
     if admin_credentials_ok(username.strip(), password):
-        request.session["admin"] = True
+        request.session["user"] = {
+            "id": 0,
+            "name": "Admin",
+            "email": "admin@local",
+            "role": "admin",
+        }
         return RedirectResponse("/admin", status_code=303)
 
     return _templates(request).TemplateResponse(
@@ -1902,6 +1904,10 @@ def api_admin_toggle_agent_active(request: Request, agent_id: int, payload: dict
     })
 @router.get("/api/admin/users-state")
 def api_admin_users_state(request: Request):
+    session_user = request.session.get("user")
+    if not session_user or session_user.get("role") != "admin":
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+
     users = list_users(active_only=False)
 
     frontend_users = []
@@ -1923,6 +1929,10 @@ def api_admin_users_state(request: Request):
     })
 @router.post("/api/admin/users")
 def api_admin_create_user(request: Request, payload: dict = Body(...)):
+    session_user = request.session.get("user")
+    if not session_user or session_user.get("role") != "admin":
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+
     name = (payload.get("name") or "").strip()
     email = (payload.get("email") or "").strip().lower()
     phone = (payload.get("phone") or "").strip()
@@ -1986,9 +1996,12 @@ def api_admin_create_user(request: Request, payload: dict = Body(...)):
             "isApproved": bool(created_user["is_approved"]),
         },
     })
-
 @router.patch("/api/admin/users/{user_id}/active")
 def api_admin_update_user_active(request: Request, user_id: int, payload: dict = Body(...)):
+    session_user = request.session.get("user")
+    if not session_user or session_user.get("role") != "admin":
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+
     is_active = payload.get("isActive", None)
 
     if is_active is None:
@@ -2022,9 +2035,12 @@ def api_admin_update_user_active(request: Request, user_id: int, payload: dict =
             "isApproved": bool(updated["is_approved"]),
         },
     })
-
 @router.delete("/api/admin/users/{user_id}")
 def api_admin_delete_user(request: Request, user_id: int):
+    session_user = request.session.get("user")
+    if not session_user or session_user.get("role") != "admin":
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+
     users = list_users(active_only=False)
     existing = next((u for u in users if u["id"] == user_id), None)
 
@@ -2037,6 +2053,10 @@ def api_admin_delete_user(request: Request, user_id: int):
 
 @router.patch("/api/admin/users/{user_id}")
 def api_admin_update_user(request: Request, user_id: int, payload: dict = Body(...)):
+    session_user = request.session.get("user")
+    if not session_user or session_user.get("role") != "admin":
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+
     name = (payload.get("name") or "").strip()
     email = (payload.get("email") or "").strip().lower()
     phone = (payload.get("phone") or "").strip()
@@ -2134,7 +2154,7 @@ def api_admin_approve_user(request: Request, user_id: int):
 
     approve_user(user_id, session_user["id"])
 
-    return JSONResponse({"success": True})   
+    return JSONResponse({"success": True}) 
 @router.patch("/api/admin/users/{user_id}/reject")
 def api_admin_reject_user(request: Request, user_id: int):
     session_user = request.session.get("user")
@@ -2150,7 +2170,7 @@ def api_admin_reject_user(request: Request, user_id: int):
 
     reject_user(user_id, session_user["id"])
 
-    return JSONResponse({"success": True})    
+    return JSONResponse({"success": True})
 @router.post("/api/auth/login")
 def api_auth_login(request: Request, payload: dict = Body(...)):
     email = (payload.get("email") or "").strip().lower()
