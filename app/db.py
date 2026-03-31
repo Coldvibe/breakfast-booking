@@ -52,8 +52,11 @@ def init_db() -> None:
             );
             """
         )
+
         try:
-            conn.execute("ALTER TABLE reservations ADD COLUMN is_paid INTEGER NOT NULL DEFAULT 0")
+            conn.execute(
+                "ALTER TABLE reservations ADD COLUMN is_paid INTEGER NOT NULL DEFAULT 0"
+            )
         except Exception:
             pass
 
@@ -121,6 +124,13 @@ def init_db() -> None:
             );
             """
         )
+
+        try:
+            conn.execute(
+                "ALTER TABLE foods ADD COLUMN stock REAL NOT NULL DEFAULT 0"
+            )
+        except Exception:
+            pass
 
         try:
             conn.execute(
@@ -380,6 +390,45 @@ def set_event_planned(event_id: int, is_planned: bool) -> None:
         )
 
 
+def update_event_flags(event_date: str, open_value: int = None, is_planned_value: int = None) -> None:
+    fields = []
+    values = []
+
+    if open_value is not None:
+        fields.append("is_open = ?")
+        values.append(int(open_value))
+
+    if is_planned_value is not None:
+        fields.append("is_planned = ?")
+        values.append(int(is_planned_value))
+
+    if not fields:
+        return
+
+    values.append(event_date)
+
+    query = f"""
+        UPDATE events
+        SET {", ".join(fields)}
+        WHERE event_date = ?
+    """
+
+    with get_conn() as conn:
+        conn.execute(query, values)
+
+
+def set_event_breakfast_price(event_date: str, breakfast_price: float) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            """
+            UPDATE events
+            SET breakfast_price = ?
+            WHERE event_date = ?
+            """,
+            (float(breakfast_price), event_date),
+        )
+
+
 # -------------------------
 # RESERVATIONS (legacy list)
 # -------------------------
@@ -417,6 +466,164 @@ def add_reservation(event_id: int, name: str, items: List[str], bring: str) -> N
             """,
             (event_id, name, json.dumps(items, ensure_ascii=False), bring),
         )
+
+
+def create_reservation(event_id: int, name: str, bring: str) -> int:
+    clean_name = name.strip()
+    clean_bring = (bring or "").strip()
+
+    with get_conn() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO reservations (event_id, name, items_json, bring)
+            VALUES (?, ?, '[]', ?)
+            """,
+            (event_id, clean_name, clean_bring),
+        )
+        return int(cur.lastrowid)
+
+
+def set_reservation_lines(reservation_id: int, lines: list[tuple[int, int]]) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM reservation_lines WHERE reservation_id = ?", (reservation_id,))
+        conn.executemany(
+            "INSERT INTO reservation_lines (reservation_id, offer_id, qty) VALUES (?, ?, ?)",
+            [(reservation_id, offer_id, qty) for offer_id, qty in lines],
+        )
+
+
+def delete_reservation_for_event_and_name(event_id: int, name: str) -> None:
+    clean_name = name.strip().lower()
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT id
+            FROM reservations
+            WHERE event_id = ?
+              AND lower(trim(name)) = ?
+            LIMIT 1
+            """,
+            (event_id, clean_name),
+        ).fetchone()
+
+        if not row:
+            return
+
+        reservation_id = int(row["id"])
+
+        conn.execute(
+            "DELETE FROM reservation_lines WHERE reservation_id = ?",
+            (reservation_id,),
+        )
+        conn.execute(
+            "DELETE FROM reservations WHERE id = ?",
+            (reservation_id,),
+        )
+
+
+def reservation_exists_for_event(event_id: int, name: str) -> bool:
+    name_norm = name.strip().lower()
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT 1
+            FROM reservations
+            WHERE event_id = ?
+              AND lower(trim(name)) = ?
+            LIMIT 1
+            """,
+            (event_id, name_norm),
+        ).fetchone()
+        return row is not None
+
+
+def list_reservations_with_lines(event_id: int) -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+              r.id AS reservation_id,
+              r.name,
+              r.bring,
+              r.is_paid,
+              r.paid_at,
+              rl.qty,
+              o.offer_type,
+              COALESCE(rec.name, f.name) AS label
+            FROM reservations r
+            LEFT JOIN reservation_lines rl ON rl.reservation_id = r.id
+            LEFT JOIN offers o ON o.id = rl.offer_id
+            LEFT JOIN recipes rec ON rec.id = o.recipe_id
+            LEFT JOIN foods f ON f.id = o.food_id
+            WHERE r.event_id = ?
+            ORDER BY r.id DESC
+            """,
+            (event_id,),
+        ).fetchall()
+
+    out: list[dict] = []
+    by_id: dict[int, dict] = {}
+
+    for row in rows:
+        rid = row["reservation_id"]
+        if rid not in by_id:
+            by_id[rid] = {
+                "id": rid,
+                "name": row["name"],
+                "bring": row["bring"] or "",
+                "is_paid": bool(row["is_paid"]),
+                "paid_at": row["paid_at"],
+                "lines": [],
+            }
+            out.append(by_id[rid])
+
+        if row["label"] is not None and row["qty"] is not None:
+            by_id[rid]["lines"].append(
+                {
+                    "label": row["label"],
+                    "qty": int(row["qty"]),
+                    "type": row["offer_type"],
+                }
+            )
+
+    return out
+
+
+def get_reservation_by_id(reservation_id: int) -> Optional[Dict[str, Any]]:
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT
+                r.id,
+                r.event_id,
+                r.name,
+                r.bring,
+                r.is_paid,
+                r.paid_at,
+                e.event_date,
+                e.breakfast_price
+            FROM reservations r
+            JOIN events e ON e.id = r.event_id
+            WHERE r.id = ?
+            LIMIT 1
+            """,
+            (reservation_id,),
+        ).fetchone()
+
+        if not row:
+            return None
+
+        return {
+            "id": row["id"],
+            "event_id": row["event_id"],
+            "name": row["name"],
+            "bring": row["bring"] or "",
+            "is_paid": bool(row["is_paid"]),
+            "paid_at": row["paid_at"],
+            "event_date": row["event_date"],
+            "breakfast_price": float(row["breakfast_price"] or 0),
+        }
 
 
 # -------------------------
@@ -688,6 +895,87 @@ def delete_user(user_id: int) -> None:
         )
 
 
+def update_user(
+    user_id: int,
+    name: str,
+    email: str,
+    phone: str,
+    role: str,
+    service: str,
+    image_url: str | None,
+) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            """
+            UPDATE users
+            SET name = ?, email = ?, phone = ?, role = ?, service = ?, image_url = ?
+            WHERE id = ?
+            """,
+            (name, email, phone, role, service, image_url, user_id),
+        )
+
+
+def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
+    clean_email = email.strip().lower()
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT id, name, email, phone, password_hash, role, service, image_url,
+                   is_active, created_at, is_approved, approved_at, approved_by, rejected_at, rejected_by
+            FROM users
+            WHERE lower(trim(email)) = ?
+            LIMIT 1
+            """,
+            (clean_email,),
+        ).fetchone()
+
+        if not row:
+            return None
+
+        return {
+            "id": row["id"],
+            "name": row["name"],
+            "email": row["email"],
+            "phone": row["phone"],
+            "password_hash": row["password_hash"],
+            "role": row["role"],
+            "service": row["service"],
+            "image_url": row["image_url"],
+            "is_active": bool(row["is_active"]),
+            "created_at": row["created_at"],
+            "is_approved": bool(row["is_approved"]),
+            "approved_at": row["approved_at"],
+            "approved_by": row["approved_by"],
+            "rejected_at": row["rejected_at"],
+            "rejected_by": row["rejected_by"],
+        }
+
+
+def authenticate_user(email: str, password_hash: str) -> Optional[Dict[str, Any]]:
+    user = get_user_by_email(email)
+
+    if not user:
+        return None
+
+    if user["password_hash"] != password_hash:
+        return None
+
+    if not user["is_active"]:
+        return {
+            **user,
+            "_auth_error": "inactive",
+        }
+
+    if not user["is_approved"]:
+        return {
+            **user,
+            "_auth_error": "not_approved",
+        }
+
+    return user
+
+
 # -------------------------
 # SHIFTS
 # -------------------------
@@ -829,6 +1117,33 @@ def set_recipe_active(recipe_id: int, is_active: bool) -> None:
         )
 
 
+def get_recipe(recipe_id: int) -> dict | None:
+    with get_conn() as conn:
+        r = conn.execute(
+            "SELECT id, name, is_active FROM recipes WHERE id = ?",
+            (recipe_id,),
+        ).fetchone()
+        if not r:
+            return None
+        return {"id": r["id"], "name": r["name"], "is_active": bool(r["is_active"])}
+
+
+def update_recipe(recipe_id: int, name: str, is_active: bool) -> None:
+    clean_name = name.strip()
+    if not clean_name:
+        raise ValueError("Recipe name is required")
+
+    with get_conn() as conn:
+        conn.execute(
+            """
+            UPDATE recipes
+            SET name = ?, is_active = ?
+            WHERE id = ?
+            """,
+            (clean_name, 1 if is_active else 0, recipe_id),
+        )
+
+
 # -------------------------
 # OFFERS
 # -------------------------
@@ -868,6 +1183,14 @@ def list_offers_for_date(offer_date: str) -> list[dict]:
             }
         )
     return out
+
+
+def list_active_offers_for_date(offer_date: str) -> dict:
+    offers = list_offers_for_date(offer_date)
+    active = [o for o in offers if o["is_active"]]
+    mains = [o for o in active if o["offer_type"] == "MAIN"]
+    sides = [o for o in active if o["offer_type"] == "SIDE"]
+    return {"mains": mains, "sides": sides}
 
 
 def add_offer_main(offer_date: str, recipe_id: int, max_per_person: int) -> None:
@@ -939,120 +1262,17 @@ def set_offer_active(offer_id: int, is_active: bool) -> None:
         )
 
 
-# -------------------------
-# RESERVATIONS (new lines)
-# -------------------------
-
-def create_reservation(event_id: int, name: str, bring: str) -> int:
-    clean_name = name.strip()
-    clean_bring = (bring or "").strip()
-
+def delete_offer(offer_id: int) -> None:
     with get_conn() as conn:
-        cur = conn.execute(
-            """
-            INSERT INTO reservations (event_id, name, items_json, bring)
-            VALUES (?, ?, '[]', ?)
-            """,
-            (event_id, clean_name, clean_bring),
-        )
-        return int(cur.lastrowid)
-
-
-def set_reservation_lines(reservation_id: int, lines: list[tuple[int, int]]) -> None:
-    with get_conn() as conn:
-        conn.execute("DELETE FROM reservation_lines WHERE reservation_id = ?", (reservation_id,))
-        conn.executemany(
-            "INSERT INTO reservation_lines (reservation_id, offer_id, qty) VALUES (?, ?, ?)",
-            [(reservation_id, offer_id, qty) for offer_id, qty in lines],
+        conn.execute(
+            "DELETE FROM offers WHERE id = ?",
+            (offer_id,),
         )
 
 
-def list_active_offers_for_date(offer_date: str) -> dict:
-    offers = list_offers_for_date(offer_date)
-    active = [o for o in offers if o["is_active"]]
-    mains = [o for o in active if o["offer_type"] == "MAIN"]
-    sides = [o for o in active if o["offer_type"] == "SIDE"]
-    return {"mains": mains, "sides": sides}
-
-
-def list_reservations_with_lines(event_id: int) -> list[dict]:
-    with get_conn() as conn:
-        rows = conn.execute(
-            """
-            SELECT
-              r.id AS reservation_id,
-              r.name,
-              r.bring,
-              r.is_paid,
-              r.paid_at,
-              rl.qty,
-              o.offer_type,
-              COALESCE(rec.name, f.name) AS label
-            FROM reservations r
-            LEFT JOIN reservation_lines rl ON rl.reservation_id = r.id
-            LEFT JOIN offers o ON o.id = rl.offer_id
-            LEFT JOIN recipes rec ON rec.id = o.recipe_id
-            LEFT JOIN foods f ON f.id = o.food_id
-            WHERE r.event_id = ?
-            ORDER BY r.id DESC
-            """,
-            (event_id,),
-        ).fetchall()
-
-    out: list[dict] = []
-    by_id: dict[int, dict] = {}
-
-    for row in rows:
-        rid = row["reservation_id"]
-        if rid not in by_id:
-            by_id[rid] = {
-                "id": rid,
-                "name": row["name"],
-                "bring": row["bring"] or "",
-                "is_paid": bool(row["is_paid"]),
-                "paid_at": row["paid_at"],
-                "lines": [],
-            }
-            out.append(by_id[rid])
-
-        if row["label"] is not None and row["qty"] is not None:
-            by_id[rid]["lines"].append(
-                {
-                    "label": row["label"],
-                    "qty": int(row["qty"]),
-                    "type": row["offer_type"],
-                }
-            )
-
-    return out
-
-
-def reservation_exists_for_event(event_id: int, name: str) -> bool:
-    name_norm = name.strip().lower()
-    with get_conn() as conn:
-        row = conn.execute(
-            """
-            SELECT 1
-            FROM reservations
-            WHERE event_id = ?
-              AND lower(trim(name)) = ?
-            LIMIT 1
-            """,
-            (event_id, name_norm),
-        ).fetchone()
-        return row is not None
-
-
-def get_recipe(recipe_id: int) -> dict | None:
-    with get_conn() as conn:
-        r = conn.execute(
-            "SELECT id, name, is_active FROM recipes WHERE id = ?",
-            (recipe_id,),
-        ).fetchone()
-        if not r:
-            return None
-        return {"id": r["id"], "name": r["name"], "is_active": bool(r["is_active"])}
-
+# -------------------------
+# SNAPSHOT ADMIN
+# -------------------------
 
 def get_tomorrow_admin_snapshot(event_date: str) -> dict:
     event = get_event(event_date)
@@ -1113,180 +1333,6 @@ def get_tomorrow_admin_snapshot(event_date: str) -> dict:
     }
 
     return snapshot
-
-
-def update_recipe(recipe_id: int, name: str, is_active: bool) -> None:
-    clean_name = name.strip()
-    if not clean_name:
-        raise ValueError("Recipe name is required")
-
-    with get_conn() as conn:
-        conn.execute(
-            """
-            UPDATE recipes
-            SET name = ?, is_active = ?
-            WHERE id = ?
-            """,
-            (clean_name, 1 if is_active else 0, recipe_id),
-        )
-
-
-def update_event_flags(event_date: str, open_value: int = None, is_planned_value: int = None) -> None:
-    fields = []
-    values = []
-
-    if open_value is not None:
-        fields.append("is_open = ?")
-        values.append(int(open_value))
-
-    if is_planned_value is not None:
-        fields.append("is_planned = ?")
-        values.append(int(is_planned_value))
-
-    if not fields:
-        return
-
-    values.append(event_date)
-
-    query = f"""
-        UPDATE events
-        SET {", ".join(fields)}
-        WHERE event_date = ?
-    """
-
-    with get_conn() as conn:
-        conn.execute(query, values)
-
-
-def delete_offer(offer_id: int) -> None:
-    with get_conn() as conn:
-        conn.execute(
-            "DELETE FROM offers WHERE id = ?",
-            (offer_id,),
-        )
-
-
-def update_user(
-    user_id: int,
-    name: str,
-    email: str,
-    phone: str,
-    role: str,
-    service: str,
-    image_url: str | None,
-) -> None:
-    with get_conn() as conn:
-        conn.execute(
-            """
-            UPDATE users
-            SET name = ?, email = ?, phone = ?, role = ?, service = ?, image_url = ?
-            WHERE id = ?
-            """,
-            (name, email, phone, role, service, image_url, user_id),
-        )
-
-
-def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
-    clean_email = email.strip().lower()
-
-    with get_conn() as conn:
-        row = conn.execute(
-            """
-            SELECT id, name, email, phone, password_hash, role, service, image_url,
-                   is_active, created_at, is_approved, approved_at, approved_by, rejected_at, rejected_by
-            FROM users
-            WHERE lower(trim(email)) = ?
-            LIMIT 1
-            """,
-            (clean_email,),
-        ).fetchone()
-
-        if not row:
-            return None
-
-        return {
-            "id": row["id"],
-            "name": row["name"],
-            "email": row["email"],
-            "phone": row["phone"],
-            "password_hash": row["password_hash"],
-            "role": row["role"],
-            "service": row["service"],
-            "image_url": row["image_url"],
-            "is_active": bool(row["is_active"]),
-            "created_at": row["created_at"],
-            "is_approved": bool(row["is_approved"]),
-            "approved_at": row["approved_at"],
-            "approved_by": row["approved_by"],
-            "rejected_at": row["rejected_at"],
-            "rejected_by": row["rejected_by"],
-        }
-
-
-def authenticate_user(email: str, password_hash: str) -> Optional[Dict[str, Any]]:
-    user = get_user_by_email(email)
-
-    if not user:
-        return None
-
-    if user["password_hash"] != password_hash:
-        return None
-
-    if not user["is_active"]:
-        return {
-            **user,
-            "_auth_error": "inactive",
-        }
-
-    if not user["is_approved"]:
-        return {
-            **user,
-            "_auth_error": "not_approved",
-        }
-
-    return user
-
-
-def delete_reservation_for_event_and_name(event_id: int, name: str) -> None:
-    clean_name = name.strip().lower()
-
-    with get_conn() as conn:
-        row = conn.execute(
-            """
-            SELECT id
-            FROM reservations
-            WHERE event_id = ?
-              AND lower(trim(name)) = ?
-            LIMIT 1
-            """,
-            (event_id, clean_name),
-        ).fetchone()
-
-        if not row:
-            return
-
-        reservation_id = int(row["id"])
-
-        conn.execute(
-            "DELETE FROM reservation_lines WHERE reservation_id = ?",
-            (reservation_id,),
-        )
-        conn.execute(
-            "DELETE FROM reservations WHERE id = ?",
-            (reservation_id,),
-        )
-
-
-def set_event_breakfast_price(event_date: str, breakfast_price: float) -> None:
-    with get_conn() as conn:
-        conn.execute(
-            """
-            UPDATE events
-            SET breakfast_price = ?
-            WHERE event_date = ?
-            """,
-            (float(breakfast_price), event_date),
-        )
 
 
 # -------------------------
@@ -1373,41 +1419,11 @@ def get_cash_balance() -> float:
         ).fetchone()
 
     return float(row["balance"] or 0)
-def get_reservation_by_id(reservation_id: int) -> Optional[Dict[str, Any]]:
-    with get_conn() as conn:
-        row = conn.execute(
-            """
-            SELECT
-                r.id,
-                r.event_id,
-                r.name,
-                r.bring,
-                r.is_paid,
-                r.paid_at,
-                e.event_date,
-                e.breakfast_price
-            FROM reservations r
-            JOIN events e ON e.id = r.event_id
-            WHERE r.id = ?
-            LIMIT 1
-            """,
-            (reservation_id,),
-        ).fetchone()
 
-        if not row:
-            return None
 
-        return {
-            "id": row["id"],
-            "event_id": row["event_id"],
-            "name": row["name"],
-            "bring": row["bring"] or "",
-            "is_paid": bool(row["is_paid"]),
-            "paid_at": row["paid_at"],
-            "event_date": row["event_date"],
-            "breakfast_price": float(row["breakfast_price"] or 0),
-        }
-
+# -------------------------
+# PAIEMENT RÉSERVATIONS
+# -------------------------
 
 def reservation_payment_transaction_exists(reservation_id: int) -> bool:
     with get_conn() as conn:
@@ -1521,3 +1537,132 @@ def mark_reservation_unpaid(reservation_id: int) -> None:
             """,
             (reservation_id,),
         )
+
+
+# -------------------------
+# STOCK / BESOINS SERVICE
+# -------------------------
+
+def get_stock_requirements_for_event(event_date: str) -> dict:
+    event = get_event(event_date)
+    if not event:
+        return {
+            "event_date": event_date,
+            "has_shortage": False,
+            "items": [],
+        }
+
+    requirements: dict[int, dict] = {}
+
+    with get_conn() as conn:
+        reservation_lines = conn.execute(
+            """
+            SELECT
+                rl.qty AS reserved_qty,
+                o.offer_type,
+                o.recipe_id,
+                o.food_id
+            FROM reservations r
+            JOIN reservation_lines rl ON rl.reservation_id = r.id
+            JOIN offers o ON o.id = rl.offer_id
+            WHERE r.event_id = ?
+            """,
+            (event["id"],),
+        ).fetchall()
+
+        for line in reservation_lines:
+            reserved_qty = float(line["reserved_qty"] or 0)
+            if reserved_qty <= 0:
+                continue
+
+            # MAIN => on déroule la recette
+            if line["offer_type"] == "MAIN" and line["recipe_id"]:
+                ingredient_rows = conn.execute(
+                    """
+                    SELECT
+                        ri.food_id,
+                        ri.qty AS ingredient_qty,
+                        f.name,
+                        f.unit,
+                        f.stock
+                    FROM recipe_ingredients ri
+                    JOIN foods f ON f.id = ri.food_id
+                    WHERE ri.recipe_id = ?
+                    """,
+                    (line["recipe_id"],),
+                ).fetchall()
+
+                for ing in ingredient_rows:
+                    food_id = int(ing["food_id"])
+                    needed_qty = reserved_qty * float(ing["ingredient_qty"] or 0)
+
+                    if food_id not in requirements:
+                        requirements[food_id] = {
+                            "food_id": food_id,
+                            "name": ing["name"],
+                            "unit": ing["unit"],
+                            "stock": float(ing["stock"] or 0),
+                            "needed": 0.0,
+                        }
+
+                    requirements[food_id]["needed"] += needed_qty
+
+            # SIDE => direct food
+            elif line["offer_type"] == "SIDE" and line["food_id"]:
+                food_row = conn.execute(
+                    """
+                    SELECT id, name, unit, stock
+                    FROM foods
+                    WHERE id = ?
+                    LIMIT 1
+                    """,
+                    (line["food_id"],),
+                ).fetchone()
+
+                if not food_row:
+                    continue
+
+                food_id = int(food_row["id"])
+
+                if food_id not in requirements:
+                    requirements[food_id] = {
+                        "food_id": food_id,
+                        "name": food_row["name"],
+                        "unit": food_row["unit"],
+                        "stock": float(food_row["stock"] or 0),
+                        "needed": 0.0,
+                    }
+
+                requirements[food_id]["needed"] += reserved_qty
+
+    items = []
+    has_shortage = False
+
+    for item in requirements.values():
+        stock = float(item["stock"] or 0)
+        needed = float(item["needed"] or 0)
+        missing = max(0.0, needed - stock)
+        is_short = missing > 0
+
+        if is_short:
+            has_shortage = True
+
+        items.append(
+            {
+                "food_id": item["food_id"],
+                "name": item["name"],
+                "unit": item["unit"],
+                "stock": stock,
+                "needed": needed,
+                "missing": missing,
+                "is_short": is_short,
+            }
+        )
+
+    items.sort(key=lambda x: (not x["is_short"], x["name"].lower()))
+
+    return {
+        "event_date": event_date,
+        "has_shortage": has_shortage,
+        "items": items,
+    }
