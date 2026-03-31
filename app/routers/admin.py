@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 import urllib.parse
+from hashlib import sha256
 from typing import Optional
 
-from fastapi import APIRouter, Form, Request,  HTTPException, Body
+from fastapi import APIRouter, Form, Request, HTTPException, Body
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
-# + importe get_recipe, update_recipe
-from hashlib import sha256
-from app.auth import admin_credentials_ok, is_admin_logged_in, require_admin
+from app.auth import admin_credentials_ok
 from app.db import (
     get_conn,
     # events
@@ -72,34 +71,31 @@ router = APIRouter()
 
 
 # -------------------------
-# Helpers (petits utils)
+# Helpers
 # -------------------------
 
 def _tomorrow_str() -> str:
-    # On centralise le "demain" pour éviter de répéter partout
     return (date.today() + timedelta(days=1)).isoformat()
+
 
 def _hash_password(password: str) -> str:
     return sha256(password.encode("utf-8")).hexdigest()
 
+
 def _menu_for_tomorrow(request: Request) -> list[str]:
-    # menu_for_date est stocké dans app.state (défini dans main.py)
     tomorrow_date = date.today() + timedelta(days=1)
     return request.app.state.menu_for_date(tomorrow_date)
 
 
 def _flash(request: Request, message: str, level: str = "success") -> None:
-    # flash() est stocké dans app.state (défini dans main.py)
     request.app.state.flash(request, message, level)
 
 
 def _templates(request: Request):
-    # templates est stocké dans app.state (défini dans main.py)
     return request.app.state.templates
 
 
 def _base_url(request: Request) -> str:
-    # Base URL de l’app (utile pour les liens WhatsApp)
     public_base = getattr(request.app.state, "public_base_url", "") or ""
     public_base = public_base.rstrip("/")
     if public_base:
@@ -121,14 +117,30 @@ def _wa_me_link(phone: str, message: str) -> str:
     return f"https://wa.me/{p_digits}?text={text}"
 
 
+def _is_admin_session(request: Request) -> bool:
+    user = request.session.get("user")
+    return bool(user and user.get("role") == "admin")
+
+
+def _require_admin_page(request: Request):
+    if not _is_admin_session(request):
+        return RedirectResponse("/admin/login", status_code=303)
+    return None
+
+
+def _require_api_admin(request: Request):
+    if not _is_admin_session(request):
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    return None
+
+
 # -------------------------
-# Admin "go" (raccourci)
+# Admin "go"
 # -------------------------
 
 @router.get("/admin/go")
 def admin_go(request: Request):
-    # Petit raccourci: si déjà loggué => dashboard, sinon => login
-    if is_admin_logged_in(request):
+    if _is_admin_session(request):
         return RedirectResponse("/admin", status_code=303)
     return RedirectResponse("/admin/login", status_code=303)
 
@@ -139,7 +151,7 @@ def admin_go(request: Request):
 
 @router.get("/admin/login", response_class=HTMLResponse)
 def admin_login(request: Request):
-    if is_admin_logged_in(request):
+    if _is_admin_session(request):
         return RedirectResponse("/admin", status_code=303)
 
     return _templates(request).TemplateResponse(
@@ -175,14 +187,14 @@ def admin_logout(request: Request):
     request.session.clear()
     return RedirectResponse("/admin/login", status_code=303)
 
+
 # -------------------------
 # Dashboard admin
 # -------------------------
 
 @router.get("/admin", response_class=HTMLResponse)
 def admin_dashboard(request: Request):
-    # Protection admin
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -195,7 +207,7 @@ def admin_dashboard(request: Request):
 
 @router.post("/admin/toggle")
 def admin_toggle(request: Request):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -211,7 +223,7 @@ def admin_toggle(request: Request):
 
 @router.post("/admin/toggle-planned")
 def admin_toggle_planned(request: Request):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -231,7 +243,7 @@ def admin_toggle_planned(request: Request):
 
 @router.get("/admin/agents", response_class=HTMLResponse)
 def admin_agents(request: Request):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -250,7 +262,7 @@ def admin_agents_add(
     phone: str = Form(...),
     whatsapp_optin: bool = Form(False),
 ):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -267,7 +279,7 @@ def admin_agents_update(
     whatsapp_optin: bool = Form(False),
     is_active: bool = Form(False),
 ):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -280,11 +292,10 @@ def admin_agents_delete(
     request: Request,
     agent_id: int = Form(...),
 ):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
-    # soft delete = désactiver
     set_agent_active(agent_id, False)
     return RedirectResponse("/admin/agents", status_code=303)
 
@@ -295,7 +306,7 @@ def admin_agents_toggle_active(
     agent_id: int = Form(...),
     is_active: int = Form(...),
 ):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -309,7 +320,7 @@ def admin_agents_toggle_whatsapp(
     agent_id: int = Form(...),
     whatsapp_optin: int = Form(...),
 ):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -323,7 +334,7 @@ def admin_agents_toggle_whatsapp(
 
 @router.get("/admin/shifts", response_class=HTMLResponse)
 def admin_shifts(request: Request):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -332,7 +343,6 @@ def admin_shifts(request: Request):
     agents = list_agents(active_only=True)
     working_ids = list_working_agent_ids(shift_date)
 
-    # Event de demain (menu auto)
     event_date = _tomorrow_str()
     ensure_event_for_date(event_date, _menu_for_tomorrow(request))
     event = get_event(event_date)
@@ -342,10 +352,7 @@ def admin_shifts(request: Request):
     wa_links = {}
     if event:
         menu_text = ", ".join(event["menu"])
-
-        # sign_agent_link est stocké dans app.state
         sign_agent_link = request.app.state.sign_agent_link
-
         base_url = _base_url(request)
 
         for a in working_agents:
@@ -382,13 +389,12 @@ def admin_shifts_save(
     shift_date: str = Form(...),
     working_agent_ids: list[int] = Form(default=[]),
 ):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
     set_working_agents_for_date(shift_date, working_agent_ids)
     return RedirectResponse("/admin/shifts", status_code=303)
-
 
 
 # -------------------------
@@ -397,7 +403,7 @@ def admin_shifts_save(
 
 @router.get("/admin/foods", response_class=HTMLResponse)
 def admin_foods(request: Request):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -415,7 +421,7 @@ def admin_foods_add(
     name: str = Form(...),
     unit: str = Form("unit"),
 ):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -429,7 +435,7 @@ def admin_foods_toggle(
     food_id: int = Form(...),
     is_active: int = Form(...),
 ):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -443,7 +449,7 @@ def admin_foods_toggle(
 
 @router.get("/admin/recipes", response_class=HTMLResponse)
 def admin_recipes(request: Request):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -460,7 +466,7 @@ def admin_recipes_add(
     request: Request,
     name: str = Form(...),
 ):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -474,7 +480,7 @@ def admin_recipes_toggle(
     recipe_id: int = Form(...),
     is_active: int = Form(...),
 ):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -488,7 +494,7 @@ def admin_recipes_toggle(
 
 @router.get("/admin/offers", response_class=HTMLResponse)
 def admin_offers(request: Request):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -520,7 +526,7 @@ def admin_offers_add_main(
     recipe_id: int = Form(...),
     max_per_person: int = Form(1),
 ):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -534,7 +540,7 @@ def admin_offers_add_side(
     food_id: int = Form(...),
     max_per_person: int = Form(1),
 ):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -548,7 +554,7 @@ def admin_offers_update_max(
     offer_id: int = Form(...),
     max_per_person: int = Form(...),
 ):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -562,7 +568,7 @@ def admin_offers_toggle(
     offer_id: int = Form(...),
     is_active: int = Form(...),
 ):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -570,36 +576,32 @@ def admin_offers_toggle(
     return RedirectResponse("/admin/offers", status_code=303)
 
 
+# -------------------------
+# Tomorrow page
+# -------------------------
+
 @router.get("/admin/tomorrow", response_class=HTMLResponse)
 def admin_tomorrow(request: Request):
-    # Protection admin
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
     event_date = _tomorrow_str()
-
-    # On garantit l’event de demain
     ensure_event_for_date(event_date, _menu_for_tomorrow(request))
     event = get_event(event_date)
 
-    # Snapshot global "demain" déjà utilisé sur le dashboard
     snapshot = get_tomorrow_admin_snapshot(event_date)
 
-    # Offres configurées
     offers = list_offers_for_date(event_date)
     mains = [o for o in offers if o["offer_type"] == "MAIN"]
     sides = [o for o in offers if o["offer_type"] == "SIDE"]
 
-    # Catalogue utile pour composer l’offre directement depuis la page
     recipes = list_recipes(active_only=True)
     foods = list_foods(active_only=True)
 
-    # Agents disponibles + sélectionnés demain
     agents = list_agents(active_only=True)
     working_ids = list_working_agent_ids(event_date)
 
-    # On enrichit les agents avec un booléen simple pour le template
     for agent in agents:
         agent["selected_tomorrow"] = agent["id"] in working_ids
 
@@ -621,7 +623,7 @@ def admin_tomorrow(request: Request):
 
 @router.post("/admin/tomorrow/toggle-open")
 def admin_tomorrow_toggle_open(request: Request):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -661,7 +663,7 @@ def admin_tomorrow_toggle_open(request: Request):
 
 @router.post("/admin/tomorrow/toggle-planned")
 def admin_tomorrow_toggle_planned(request: Request):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -699,9 +701,10 @@ def admin_tomorrow_toggle_planned(request: Request):
 
     return RedirectResponse(url="/admin/tomorrow", status_code=303)
 
+
 @router.post("/admin/tomorrow/update-agents")
 async def admin_tomorrow_update_agents(request: Request):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -719,7 +722,6 @@ async def admin_tomorrow_update_agents(request: Request):
     if shift_date:
         set_working_agents_for_date(shift_date, working_agent_ids)
 
-    # Recharger les données nécessaires au partial
     event = get_event(shift_date)
     agents = list_agents(active_only=True)
     selected_ids = list_working_agent_ids(shift_date)
@@ -727,7 +729,6 @@ async def admin_tomorrow_update_agents(request: Request):
     for agent in agents:
         agent["selected_tomorrow"] = agent["id"] in selected_ids
 
-    # Si la requête vient de HTMX, on renvoie juste le bloc agents
     if request.headers.get("HX-Request") == "true":
         return _templates(request).TemplateResponse(
             "admin/_tomorrow_agents.html",
@@ -739,13 +740,12 @@ async def admin_tomorrow_update_agents(request: Request):
             },
         )
 
-    # Fallback classique si HTMX n'est pas chargé
     return RedirectResponse(url="/admin/tomorrow", status_code=303)
 
 
 @router.post("/admin/tomorrow/add-offer")
 async def admin_tomorrow_add_offer(request: Request):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -779,7 +779,6 @@ async def admin_tomorrow_add_offer(request: Request):
         except (TypeError, ValueError):
             pass
 
-    # Recharger les données utiles au partial
     event = get_event(event_date)
     offers = list_offers_for_date(event_date)
     mains = [o for o in offers if o["offer_type"] == "MAIN"]
@@ -787,7 +786,6 @@ async def admin_tomorrow_add_offer(request: Request):
     recipes = list_recipes(active_only=True)
     foods = list_foods(active_only=True)
 
-    # Si la requête vient de HTMX, renvoyer juste le bloc Offre
     if request.headers.get("HX-Request") == "true":
         return _templates(request).TemplateResponse(
             "admin/_tomorrow_offers.html",
@@ -805,11 +803,9 @@ async def admin_tomorrow_add_offer(request: Request):
     return RedirectResponse(url="/admin/tomorrow", status_code=303)
 
 
-
-
 @router.get("/admin/recipes/edit/{recipe_id}", response_class=HTMLResponse)
 def admin_recipes_edit(request: Request, recipe_id: int):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -830,16 +826,18 @@ def admin_recipes_edit_post(
     name: str = Form(...),
     is_active: bool = Form(False),
 ):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
     update_recipe(recipe_id, name=name, is_active=is_active)
     _flash(request, "✅ Recette mise à jour.")
     return RedirectResponse("/admin/recipes", status_code=303)
+
+
 @router.post("/admin/tomorrow/update-offer-max")
 async def update_offer_max_route(request: Request):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -853,13 +851,15 @@ async def update_offer_max_route(request: Request):
         offer_id = int(offer_id)
         max_val = max(1, int(max_raw))
         update_offer_max(offer_id, max_val)
-    except:
+    except Exception:
         pass
 
     return await _render_offers_partial(request, event_date)
+
+
 @router.post("/admin/tomorrow/toggle-offer")
 async def toggle_offer_route(request: Request):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -870,17 +870,17 @@ async def toggle_offer_route(request: Request):
 
     try:
         offer_id = int(offer_id)
-
-        # récup état actuel
         offers = list_offers_for_date(event_date)
         offer = next((o for o in offers if o["id"] == offer_id), None)
 
         if offer:
             set_offer_active(offer_id, not offer["is_active"])
-    except:
+    except Exception:
         pass
 
     return await _render_offers_partial(request, event_date)
+
+
 async def _render_offers_partial(request: Request, event_date: str):
     event = get_event(event_date)
     offers = list_offers_for_date(event_date)
@@ -904,9 +904,10 @@ async def _render_offers_partial(request: Request, event_date: str):
         },
     )
 
+
 @router.post("/admin/tomorrow/delete-offer")
 async def delete_offer_route(request: Request):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -923,9 +924,10 @@ async def delete_offer_route(request: Request):
 
     return await _render_offers_partial(request, event_date)
 
+
 @router.get("/admin/tomorrow/top")
 def admin_tomorrow_top(request: Request):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -955,9 +957,10 @@ def admin_tomorrow_top(request: Request):
         },
     )
 
+
 @router.get("/admin/tomorrow/bottom")
 def admin_tomorrow_bottom(request: Request):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -976,9 +979,10 @@ def admin_tomorrow_bottom(request: Request):
         },
     )
 
+
 @router.get("/admin/app", response_class=HTMLResponse)
 def admin_app(request: Request):
-    guard = require_admin(request)
+    guard = _require_admin_page(request)
     if guard:
         return guard
 
@@ -1011,17 +1015,135 @@ def admin_app(request: Request):
             "recipes": recipes,
             "foods": foods,
         },
-    )    
+    )
+
+
+# -------------------------
+# Auth API
+# -------------------------
+
+@router.post("/api/auth/register")
+def api_auth_register(payload: dict = Body(...)):
+    name = (payload.get("name") or "").strip()
+    email = (payload.get("email") or "").strip().lower()
+    phone = (payload.get("phone") or "").strip()
+    password = payload.get("password") or ""
+    service = (payload.get("service") or "").strip()
+
+    if not name:
+        return JSONResponse({"error": "missing_name"}, status_code=400)
+
+    if not email:
+        return JSONResponse({"error": "missing_email"}, status_code=400)
+
+    if not password:
+        return JSONResponse({"error": "missing_password"}, status_code=400)
+
+    existing_users = list_users(active_only=False)
+    duplicate = next((u for u in existing_users if u["email"].strip().lower() == email), None)
+    if duplicate:
+        return JSONResponse({"error": "duplicate_email"}, status_code=409)
+
+    try:
+        add_user(
+            name=name,
+            email=email,
+            password_hash=_hash_password(password),
+            phone=phone,
+            role="utilisateur",
+            service=service,
+            image_url="",
+            is_active=True,
+            is_approved=False,
+        )
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+    return JSONResponse({
+        "success": True,
+        "message": "registration_pending",
+    })
+
+
+@router.post("/api/auth/login")
+def api_auth_login(request: Request, payload: dict = Body(...)):
+    email = (payload.get("email") or "").strip().lower()
+    password = payload.get("password") or ""
+
+    if not email:
+        return JSONResponse({"error": "missing_email"}, status_code=400)
+
+    if not password:
+        return JSONResponse({"error": "missing_password"}, status_code=400)
+
+    user = authenticate_user(email, _hash_password(password))
+
+    if not user:
+        return JSONResponse({"error": "invalid_credentials"}, status_code=401)
+
+    if user.get("_auth_error") == "inactive":
+        return JSONResponse({"error": "inactive_account"}, status_code=403)
+
+    if user.get("_auth_error") == "not_approved":
+        return JSONResponse({"error": "account_pending_approval"}, status_code=403)
+
+    request.session["user"] = {
+        "id": user["id"],
+        "name": user["name"],
+        "email": user["email"],
+        "role": user["role"],
+    }
+
+    return JSONResponse({
+        "success": True,
+        "user": {
+            "id": f"u-{user['id']}",
+            "name": user["name"],
+            "email": user["email"],
+            "role": user["role"],
+        },
+    })
+
+
+@router.post("/api/auth/logout")
+def api_auth_logout(request: Request):
+    request.session.pop("user", None)
+    return JSONResponse({"success": True})
+
+
+@router.get("/api/auth/me")
+def api_auth_me(request: Request):
+    session_user = request.session.get("user")
+
+    if not session_user:
+        return JSONResponse({"error": "not_authenticated"}, status_code=401)
+
+    return JSONResponse({
+        "user": {
+            "id": f"u-{session_user['id']}",
+            "name": session_user["name"],
+            "email": session_user["email"],
+            "role": session_user["role"],
+        }
+    })
+
+
+# -------------------------
+# Admin API - Daily offer
+# -------------------------
 
 @router.get("/api/admin/daily-offer-state")
 def api_admin_daily_offer_state(request: Request):
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
+
     event_date = _tomorrow_str()
     ensure_event_for_date(event_date, _menu_for_tomorrow(request))
 
     event = get_event(event_date)
     offers = list_offers_for_date(event_date)
     recipes = list_recipes(active_only=True)
-    foods = list_foods(active_only=True)
 
     frontend_recipes = []
 
@@ -1129,8 +1251,14 @@ def api_admin_daily_offer_state(request: Request):
         "recipes": frontend_recipes,
         "dailyOffer": daily_offer,
     })
+
+
 @router.post("/api/admin/daily-offer-state")
 def api_admin_save_daily_offer_state(request: Request, payload: dict = Body(...)):
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
+
     event_date = _tomorrow_str()
     ensure_event_for_date(event_date, _menu_for_tomorrow(request))
 
@@ -1143,25 +1271,20 @@ def api_admin_save_daily_offer_state(request: Request, payload: dict = Body(...)
     main_dishes = payload.get("mainDishes", [])
     accompaniments = payload.get("accompaniments", [])
 
-    # 1) Mettre à jour l'event
     set_event_planned(event["id"], is_planned)
 
-    # Si pas prévu, on ferme aussi les réservations
     if not is_planned:
         if event["open"]:
             toggle_event_open(event["id"])
     else:
-        # on synchronise l'état open avec la valeur voulue
         current_open = bool(get_event(event_date)["open"])
         if current_open != is_open:
             toggle_event_open(event["id"])
 
-    # 2) Remplacer toutes les offres du jour
     existing_offers = list_offers_for_date(event_date)
     for offer in existing_offers:
         set_offer_active(offer["id"], False)
 
-    # 3) Réactiver / recréer les MAIN
     if is_planned:
         for item in main_dishes:
             recipe_id_raw = item.get("recipeId", "")
@@ -1171,7 +1294,6 @@ def api_admin_save_daily_offer_state(request: Request, payload: dict = Body(...)
                 recipe_id = int(recipe_id_raw.replace("r-", ""))
                 add_offer_main(event_date, recipe_id, max_per_person)
 
-        # 4) Réactiver / recréer les SIDE
         for item in accompaniments:
             food_id_raw = item.get("recipeId", "")
             max_per_person = int(item.get("maxPerPerson", 1))
@@ -1180,10 +1302,8 @@ def api_admin_save_daily_offer_state(request: Request, payload: dict = Body(...)
                 food_id = int(food_id_raw.replace("f-", ""))
                 add_offer_side(event_date, food_id, max_per_person)
 
-    # 5) Retourner l'état relu depuis le backend
     offers = list_offers_for_date(event_date)
     recipes = list_recipes(active_only=True)
-    foods = list_foods(active_only=True)
     refreshed_event = get_event(event_date)
 
     frontend_recipes = []
@@ -1301,8 +1421,18 @@ def api_admin_save_daily_offer_state(request: Request, payload: dict = Body(...)
         "ingredients": frontend_ingredients,
         "dailyOffer": daily_offer,
     })
+
+
+# -------------------------
+# Admin API - Recipes
+# -------------------------
+
 @router.post("/api/admin/recipes")
 def api_admin_create_recipe(request: Request, payload: dict = Body(...)):
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
+
     name = (payload.get("name") or "").strip()
     ingredients = payload.get("ingredients", [])
     image_url = (payload.get("imageUrl") or "").strip() or None
@@ -1313,7 +1443,6 @@ def api_admin_create_recipe(request: Request, payload: dict = Body(...)):
     if not ingredients:
         return JSONResponse({"error": "missing_ingredients"}, status_code=400)
 
-    # 1. créer la recette
     add_recipe(name)
     with get_conn() as conn:
         try:
@@ -1326,7 +1455,6 @@ def api_admin_create_recipe(request: Request, payload: dict = Body(...)):
             (image_url, name),
         )
 
-    # 2. relire la recette créée pour récupérer son id
     recipes = list_recipes(active_only=False)
     created_recipe = next((r for r in recipes if r["name"] == name), None)
 
@@ -1335,7 +1463,6 @@ def api_admin_create_recipe(request: Request, payload: dict = Body(...)):
 
     recipe_id = created_recipe["id"]
 
-    # 3. enregistrer les ingrédients de la recette
     with get_conn() as conn:
         conn.execute("DELETE FROM recipe_ingredients WHERE recipe_id = ?", (recipe_id,))
 
@@ -1370,8 +1497,76 @@ def api_admin_create_recipe(request: Request, payload: dict = Body(...)):
         },
     })
 
+
+@router.patch("/api/admin/recipes/{recipe_id}")
+def api_admin_update_recipe(request: Request, recipe_id: int, payload: dict = Body(...)):
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
+
+    name = (payload.get("name") or "").strip()
+    ingredients = payload.get("ingredients", [])
+    image_url = (payload.get("imageUrl") or "").strip() or None
+
+    if not name:
+        return JSONResponse({"error": "missing_name"}, status_code=400)
+
+    if not ingredients:
+        return JSONResponse({"error": "missing_ingredients"}, status_code=400)
+
+    with get_conn() as conn:
+        existing = conn.execute(
+            "SELECT id FROM recipes WHERE id = ?",
+            (recipe_id,),
+        ).fetchone()
+
+        if not existing:
+            return JSONResponse({"error": "recipe_not_found"}, status_code=404)
+
+        try:
+            conn.execute("ALTER TABLE recipes ADD COLUMN image_url TEXT")
+        except Exception:
+            pass
+
+        conn.execute(
+            "UPDATE recipes SET name = ?, image_url = ? WHERE id = ?",
+            (name, image_url, recipe_id),
+        )
+
+        conn.execute(
+            "DELETE FROM recipe_ingredients WHERE recipe_id = ?",
+            (recipe_id,),
+        )
+
+        for item in ingredients:
+            ingredient_id_raw = item.get("ingredientId", "")
+            quantity = float(item.get("quantity", 0))
+
+            if not ingredient_id_raw or quantity <= 0:
+                continue
+
+            if ingredient_id_raw.startswith("f-"):
+                food_id = int(ingredient_id_raw.replace("f-", ""))
+            else:
+                food_id = int(ingredient_id_raw)
+
+            conn.execute(
+                """
+                INSERT INTO recipe_ingredients (recipe_id, food_id, qty, unit)
+                VALUES (?, ?, ?, 'unit')
+                """,
+                (recipe_id, food_id, quantity),
+            )
+
+    return JSONResponse({"success": True})
+
+
 @router.delete("/api/admin/recipes/{recipe_id}")
 def api_admin_delete_recipe(request: Request, recipe_id: int):
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
+
     event_date = _tomorrow_str()
     offers = list_offers_for_date(event_date)
 
@@ -1388,8 +1583,95 @@ def api_admin_delete_recipe(request: Request, recipe_id: int):
 
     return JSONResponse({"success": True})
 
+
+@router.get("/api/admin/recipes-state")
+def api_admin_recipes_state(request: Request):
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
+
+    with get_conn() as conn:
+        recipe_rows = conn.execute(
+            """
+            SELECT id, name, is_active, image_url
+            FROM recipes
+            WHERE is_active = 1
+            ORDER BY name
+            """
+        ).fetchall()
+
+    frontend_ingredients = []
+    frontend_recipes = []
+
+    with get_conn() as conn:
+        try:
+            conn.execute("ALTER TABLE foods ADD COLUMN stock REAL NOT NULL DEFAULT 0")
+        except Exception:
+            pass
+
+        food_rows = conn.execute(
+            """
+            SELECT id, name, unit, stock, is_side, low_stock_threshold, image_url
+            FROM foods
+            WHERE is_active = 1
+            ORDER BY name
+            """
+        ).fetchall()
+
+        for food in food_rows:
+            frontend_ingredients.append({
+                "id": f"f-{food['id']}",
+                "name": food["name"],
+                "unit": food["unit"],
+                "stock": float(food["stock"] or 0),
+                "isSide": bool(food["is_side"]),
+                "lowStockThreshold": float(food["low_stock_threshold"] or 0),
+                "imageUrl": food["image_url"] or "",
+            })
+
+        for recipe in recipe_rows:
+            ingredient_rows = conn.execute(
+                """
+                SELECT food_id, qty
+                FROM recipe_ingredients
+                WHERE recipe_id = ?
+                ORDER BY id
+                """,
+                (recipe["id"],),
+            ).fetchall()
+
+            recipe_ingredients = []
+            for row in ingredient_rows:
+                recipe_ingredients.append({
+                    "ingredientId": f"f-{row['food_id']}",
+                    "quantity": float(row["qty"] or 0),
+                })
+
+            frontend_recipes.append({
+                "id": f"r-{recipe['id']}",
+                "name": recipe["name"],
+                "category": "principal",
+                "ingredients": recipe_ingredients,
+                "imageUrl": recipe["image_url"],
+                "createdAt": None,
+            })
+
+    return JSONResponse({
+        "ingredients": frontend_ingredients,
+        "recipes": frontend_recipes,
+    })
+
+
+# -------------------------
+# Admin API - Foods
+# -------------------------
+
 @router.post("/api/admin/foods")
 def api_admin_create_food(request: Request, payload: dict = Body(...)):
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
+
     name = (payload.get("name") or "").strip()
     unit = (payload.get("unit") or "unit").strip()
     stock = payload.get("stock", 0)
@@ -1397,6 +1679,7 @@ def api_admin_create_food(request: Request, payload: dict = Body(...)):
 
     if not name:
         return JSONResponse({"error": "missing_name"}, status_code=400)
+
     with get_conn() as conn:
         existing = conn.execute(
             "SELECT id FROM foods WHERE LOWER(name) = LOWER(?) LIMIT 1",
@@ -1404,7 +1687,7 @@ def api_admin_create_food(request: Request, payload: dict = Body(...)):
         ).fetchone()
 
     if existing:
-        return JSONResponse({"error": "duplicate_food"}, status_code=409)    
+        return JSONResponse({"error": "duplicate_food"}, status_code=409)
 
     try:
         stock_value = float(stock)
@@ -1456,8 +1739,13 @@ def api_admin_create_food(request: Request, payload: dict = Body(...)):
         },
     })
 
+
 @router.patch("/api/admin/foods/{food_id}")
 def api_admin_update_food(request: Request, food_id: int, payload: dict = Body(...)):
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
+
     name = (payload.get("name") or "").strip()
     unit = (payload.get("unit") or "").strip()
     stock = payload.get("stock", None)
@@ -1542,8 +1830,14 @@ def api_admin_update_food(request: Request, food_id: int, payload: dict = Body(.
             "imageUrl": updated["image_url"] or "",
         },
     })
+
+
 @router.patch("/api/admin/foods/{food_id}/side")
 def api_admin_update_food_side(request: Request, food_id: int, payload: dict = Body(...)):
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
+
     is_side = payload.get("isSide", None)
 
     if is_side is None:
@@ -1583,8 +1877,14 @@ def api_admin_update_food_side(request: Request, food_id: int, payload: dict = B
             "isSide": bool(updated["is_side"]),
         },
     })
+
+
 @router.patch("/api/admin/foods/{food_id}/threshold")
 def api_admin_update_food_threshold(request: Request, food_id: int, payload: dict = Body(...)):
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
+
     low_stock_threshold = payload.get("lowStockThreshold", None)
 
     if low_stock_threshold is None:
@@ -1639,8 +1939,14 @@ def api_admin_update_food_threshold(request: Request, food_id: int, payload: dic
             "lowStockThreshold": float(updated["low_stock_threshold"] or 0),
         },
     })
+
+
 @router.delete("/api/admin/foods/{food_id}")
 def api_admin_delete_food(request: Request, food_id: int):
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
+
     event_date = _tomorrow_str()
     offers = list_offers_for_date(event_date)
 
@@ -1682,142 +1988,18 @@ def api_admin_delete_food(request: Request, food_id: int):
         conn.execute("DELETE FROM foods WHERE id = ?", (food_id,))
 
     return JSONResponse({"success": True})
-@router.patch("/api/admin/recipes/{recipe_id}")
-def api_admin_update_recipe(request: Request, recipe_id: int, payload: dict = Body(...)):
-    name = (payload.get("name") or "").strip()
-    ingredients = payload.get("ingredients", [])
-    image_url = (payload.get("imageUrl") or "").strip() or None
-    
 
-    if not name:
-        return JSONResponse({"error": "missing_name"}, status_code=400)
 
-    if not ingredients:
-        return JSONResponse({"error": "missing_ingredients"}, status_code=400)
+# -------------------------
+# Admin API - Agents
+# -------------------------
 
-    with get_conn() as conn:
-        # vérifier que la recette existe
-        existing = conn.execute(
-            "SELECT id FROM recipes WHERE id = ?",
-            (recipe_id,),
-        ).fetchone()
-
-        if not existing:
-            return JSONResponse({"error": "recipe_not_found"}, status_code=404)
-
-        # mettre à jour le nom
-        try:
-            conn.execute("ALTER TABLE recipes ADD COLUMN image_url TEXT")
-        except Exception:
-            pass
-
-        conn.execute(
-            "UPDATE recipes SET name = ?, image_url = ? WHERE id = ?",
-            (name, image_url, recipe_id),
-        )
-
-        # remplacer les ingrédients
-        conn.execute(
-            "DELETE FROM recipe_ingredients WHERE recipe_id = ?",
-            (recipe_id,),
-        )
-
-        for item in ingredients:
-            ingredient_id_raw = item.get("ingredientId", "")
-            quantity = float(item.get("quantity", 0))
-
-            if not ingredient_id_raw or quantity <= 0:
-                continue
-
-            if ingredient_id_raw.startswith("f-"):
-                food_id = int(ingredient_id_raw.replace("f-", ""))
-            else:
-                food_id = int(ingredient_id_raw)
-
-            conn.execute(
-                """
-                INSERT INTO recipe_ingredients (recipe_id, food_id, qty, unit)
-                VALUES (?, ?, ?, 'unit')
-                """,
-                (recipe_id, food_id, quantity),
-            )
-
-    return JSONResponse({"success": True})
-
-@router.get("/api/admin/recipes-state")
-def api_admin_recipes_state(request: Request):
-    with get_conn() as conn:
-        recipe_rows = conn.execute(
-            """
-            SELECT id, name, is_active, image_url
-            FROM recipes
-            WHERE is_active = 1
-            ORDER BY name
-            """
-        ).fetchall()
-
-    frontend_ingredients = []
-    frontend_recipes = []
-
-    with get_conn() as conn:
-        try:
-            conn.execute("ALTER TABLE foods ADD COLUMN stock REAL NOT NULL DEFAULT 0")
-        except Exception:
-            pass
-
-        food_rows = conn.execute(
-            """
-            SELECT id, name, unit, stock, is_side, low_stock_threshold, image_url
-            FROM foods
-            WHERE is_active = 1
-            ORDER BY name
-            """
-        ).fetchall()
-
-        for food in food_rows:
-            frontend_ingredients.append({
-            "id": f"f-{food['id']}",
-            "name": food["name"],
-            "unit": food["unit"],
-            "stock": float(food["stock"] or 0),
-            "isSide": bool(food["is_side"]),
-            "lowStockThreshold": float(food["low_stock_threshold"] or 0),
-            "imageUrl": food["image_url"] or "",
-        })
-
-        for recipe in recipe_rows:
-            ingredient_rows = conn.execute(
-                """
-                SELECT food_id, qty
-                FROM recipe_ingredients
-                WHERE recipe_id = ?
-                ORDER BY id
-                """,
-                (recipe["id"],),
-            ).fetchall()
-
-            recipe_ingredients = []
-            for row in ingredient_rows:
-                recipe_ingredients.append({
-                    "ingredientId": f"f-{row['food_id']}",
-                    "quantity": float(row["qty"] or 0),
-                })
-
-            frontend_recipes.append({
-                "id": f"r-{recipe['id']}",
-                "name": recipe["name"],
-                "category": "principal",
-                "ingredients": recipe_ingredients,
-                "imageUrl": recipe["image_url"],
-                "createdAt": None,
-            })
-
-    return JSONResponse({
-        "ingredients": frontend_ingredients,
-        "recipes": frontend_recipes,
-    })
 @router.get("/api/admin/agents-state")
 def api_admin_agents_state(request: Request):
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
+
     agents = list_agents(active_only=False)
 
     frontend_agents = []
@@ -1833,8 +2015,14 @@ def api_admin_agents_state(request: Request):
     return JSONResponse({
         "agents": frontend_agents,
     })
+
+
 @router.post("/api/admin/agents")
 def api_admin_create_agent(request: Request, payload: dict = Body(...)):
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
+
     name = (payload.get("name") or "").strip()
     phone = (payload.get("phone") or "").strip()
     whatsapp_optin = bool(payload.get("whatsappOptin", True))
@@ -1871,8 +2059,14 @@ def api_admin_create_agent(request: Request, payload: dict = Body(...)):
             "isActive": bool(created_agent["is_active"]),
         },
     })
+
+
 @router.patch("/api/admin/agents/{agent_id}/active")
 def api_admin_toggle_agent_active(request: Request, agent_id: int, payload: dict = Body(...)):
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
+
     is_active = payload.get("isActive", None)
 
     if is_active is None:
@@ -1902,11 +2096,17 @@ def api_admin_toggle_agent_active(request: Request, agent_id: int, payload: dict
             "isActive": bool(updated["is_active"]),
         },
     })
+
+
+# -------------------------
+# Admin API - Users
+# -------------------------
+
 @router.get("/api/admin/users-state")
 def api_admin_users_state(request: Request):
-    session_user = request.session.get("user")
-    if not session_user or session_user.get("role") != "admin":
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
 
     users = list_users(active_only=False)
 
@@ -1927,11 +2127,13 @@ def api_admin_users_state(request: Request):
     return JSONResponse({
         "users": frontend_users,
     })
+
+
 @router.post("/api/admin/users")
 def api_admin_create_user(request: Request, payload: dict = Body(...)):
-    session_user = request.session.get("user")
-    if not session_user or session_user.get("role") != "admin":
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
 
     name = (payload.get("name") or "").strip()
     email = (payload.get("email") or "").strip().lower()
@@ -1996,11 +2198,13 @@ def api_admin_create_user(request: Request, payload: dict = Body(...)):
             "isApproved": bool(created_user["is_approved"]),
         },
     })
+
+
 @router.patch("/api/admin/users/{user_id}/active")
 def api_admin_update_user_active(request: Request, user_id: int, payload: dict = Body(...)):
-    session_user = request.session.get("user")
-    if not session_user or session_user.get("role") != "admin":
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
 
     is_active = payload.get("isActive", None)
 
@@ -2035,11 +2239,13 @@ def api_admin_update_user_active(request: Request, user_id: int, payload: dict =
             "isApproved": bool(updated["is_approved"]),
         },
     })
+
+
 @router.delete("/api/admin/users/{user_id}")
 def api_admin_delete_user(request: Request, user_id: int):
-    session_user = request.session.get("user")
-    if not session_user or session_user.get("role") != "admin":
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
 
     users = list_users(active_only=False)
     existing = next((u for u in users if u["id"] == user_id), None)
@@ -2051,11 +2257,12 @@ def api_admin_delete_user(request: Request, user_id: int):
 
     return JSONResponse({"success": True})
 
+
 @router.patch("/api/admin/users/{user_id}")
 def api_admin_update_user(request: Request, user_id: int, payload: dict = Body(...)):
-    session_user = request.session.get("user")
-    if not session_user or session_user.get("role") != "admin":
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
 
     name = (payload.get("name") or "").strip()
     email = (payload.get("email") or "").strip().lower()
@@ -2113,12 +2320,13 @@ def api_admin_update_user(request: Request, user_id: int, payload: dict = Body(.
             "isApproved": bool(updated["is_approved"]),
         },
     })
+
+
 @router.get("/api/admin/users/pending")
 def api_admin_pending_users(request: Request):
-    session_user = request.session.get("user")
-
-    if not session_user or session_user.get("role") != "admin":
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
 
     users = list_pending_users()
 
@@ -2139,12 +2347,15 @@ def api_admin_pending_users(request: Request):
             for user in users
         ]
     })
+
+
 @router.patch("/api/admin/users/{user_id}/approve")
 def api_admin_approve_user(request: Request, user_id: int):
-    session_user = request.session.get("user")
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
 
-    if not session_user or session_user.get("role") != "admin":
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+    session_user = request.session.get("user")
 
     users = list_users(active_only=False)
     existing = next((u for u in users if u["id"] == user_id), None)
@@ -2154,13 +2365,16 @@ def api_admin_approve_user(request: Request, user_id: int):
 
     approve_user(user_id, session_user["id"])
 
-    return JSONResponse({"success": True}) 
+    return JSONResponse({"success": True})
+
+
 @router.patch("/api/admin/users/{user_id}/reject")
 def api_admin_reject_user(request: Request, user_id: int):
-    session_user = request.session.get("user")
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
 
-    if not session_user or session_user.get("role") != "admin":
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+    session_user = request.session.get("user")
 
     users = list_users(active_only=False)
     existing = next((u for u in users if u["id"] == user_id), None)
@@ -2171,63 +2385,18 @@ def api_admin_reject_user(request: Request, user_id: int):
     reject_user(user_id, session_user["id"])
 
     return JSONResponse({"success": True})
-@router.post("/api/auth/login")
-def api_auth_login(request: Request, payload: dict = Body(...)):
-    email = (payload.get("email") or "").strip().lower()
-    password = payload.get("password") or ""
 
-    if not email:
-        return JSONResponse({"error": "missing_email"}, status_code=400)
 
-    if not password:
-        return JSONResponse({"error": "missing_password"}, status_code=400)
-
-    user = authenticate_user(email, _hash_password(password))
-
-    if not user:
-        return JSONResponse({"error": "invalid_credentials"}, status_code=401)
-
-    if user.get("_auth_error") == "inactive":
-        return JSONResponse({"error": "inactive_account"}, status_code=403)
-
-    if user.get("_auth_error") == "not_approved":
-        return JSONResponse({"error": "account_pending_approval"}, status_code=403)
-
-    request.session["user"] = {
-        "id": user["id"],
-        "name": user["name"],
-        "email": user["email"],
-        "role": user["role"],
-    }
-
-    return JSONResponse({
-        "success": True,
-        "user": {
-            "id": f"u-{user['id']}",
-            "name": user["name"],
-            "email": user["email"],
-            "role": user["role"],
-        },
-    })
-
-@router.get("/api/auth/me")
-def api_auth_me(request: Request):
-    session_user = request.session.get("user")
-
-    if not session_user:
-        return JSONResponse({"error": "not_authenticated"}, status_code=401)
-
-    return JSONResponse({
-        "user": {
-            "id": f"u-{session_user['id']}",
-            "name": session_user["name"],
-            "email": session_user["email"],
-            "role": session_user["role"],
-        }
-    }) 
+# -------------------------
+# Admin API - Reservations
+# -------------------------
 
 @router.get("/api/admin/reservations-state")
 def api_admin_reservations_state(request: Request):
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
+
     event_date = _tomorrow_str()
     ensure_event_for_date(event_date, _menu_for_tomorrow(request))
 
@@ -2266,53 +2435,12 @@ def api_admin_reservations_state(request: Request):
             "mains": offers.get("mains", []),
             "sides": offers.get("sides", []),
         },
-    })   
-@router.post("/api/auth/register")
-def api_auth_register(payload: dict = Body(...)):
-    name = (payload.get("name") or "").strip()
-    email = (payload.get("email") or "").strip().lower()
-    phone = (payload.get("phone") or "").strip()
-    password = payload.get("password") or ""
-    service = (payload.get("service") or "").strip()
-
-    if not name:
-        return JSONResponse({"error": "missing_name"}, status_code=400)
-
-    if not email:
-        return JSONResponse({"error": "missing_email"}, status_code=400)
-
-    if not password:
-        return JSONResponse({"error": "missing_password"}, status_code=400)
-
-    existing_users = list_users(active_only=False)
-    duplicate = next((u for u in existing_users if u["email"].strip().lower() == email), None)
-    if duplicate:
-        return JSONResponse({"error": "duplicate_email"}, status_code=409)
-
-    try:
-        add_user(
-            name=name,
-            email=email,
-            password_hash=_hash_password(password),
-            phone=phone,
-            role="utilisateur",
-            service=service,
-            image_url="",
-            is_active=True,
-            is_approved=False,
-        )
-    except ValueError as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
-
-    return JSONResponse({
-        "success": True,
-        "message": "registration_pending",
     })
-@router.post("/api/auth/logout")
-def api_auth_logout(request: Request):
-    request.session.pop("user", None)
-    request.session.pop("admin", None)
-    return JSONResponse({"success": True})    
+
+
+# -------------------------
+# Employee API
+# -------------------------
 
 @router.post("/api/employee/reservation")
 def api_employee_create_reservation(request: Request, payload: dict = Body(...)):
@@ -2347,7 +2475,6 @@ def api_employee_create_reservation(request: Request, payload: dict = Body(...))
 
     all_offer_lines: list[tuple[int, int]] = []
 
-    # Plats principaux
     for recipe_id, qty_raw in main_dishes.items():
         try:
             qty = int(qty_raw)
@@ -2373,7 +2500,6 @@ def api_employee_create_reservation(request: Request, payload: dict = Body(...))
     if len(all_offer_lines) == 0:
         return JSONResponse({"error": "missing_main_dishes"}, status_code=400)
 
-    # Accompagnements
     for recipe_id, qty_raw in accompaniments.items():
         try:
             qty = int(qty_raw)
@@ -2398,7 +2524,6 @@ def api_employee_create_reservation(request: Request, payload: dict = Body(...))
 
     employee_name = session_user["name"]
 
-    # Remplace l’ancienne réservation éventuelle
     delete_reservation_for_event_and_name(event["id"], employee_name)
 
     reservation_id = create_reservation(
@@ -2410,6 +2535,7 @@ def api_employee_create_reservation(request: Request, payload: dict = Body(...))
     set_reservation_lines(reservation_id, all_offer_lines)
 
     return JSONResponse({"success": True})
+
 
 @router.get("/api/employee/reservation")
 def api_employee_get_reservation(request: Request):
@@ -2442,8 +2568,9 @@ def api_employee_get_reservation(request: Request):
     main_dishes = {}
     accompaniments = {}
 
-    main_offers = list_active_offers_for_date(event_date).get("mains", [])
-    side_offers = list_active_offers_for_date(event_date).get("sides", [])
+    active_offers = list_active_offers_for_date(event_date)
+    main_offers = active_offers.get("mains", [])
+    side_offers = active_offers.get("sides", [])
 
     for line in current.get("lines", []):
         label = line.get("label")
@@ -2470,6 +2597,8 @@ def api_employee_get_reservation(request: Request):
             "accompaniments": accompaniments,
         },
     })
+
+
 @router.delete("/api/employee/reservation")
 def api_employee_delete_reservation(request: Request):
     session_user = request.session.get("user")
@@ -2491,8 +2620,39 @@ def api_employee_delete_reservation(request: Request):
     return JSONResponse({"success": True})
 
 
+@router.get("/api/employee/breakfast-info")
+def api_employee_breakfast_info(request: Request):
+    session_user = request.session.get("user")
+    if not session_user:
+        return JSONResponse({"error": "not_authenticated"}, status_code=401)
+
+    if session_user.get("role") != "utilisateur":
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+
+    event_date = _tomorrow_str()
+    ensure_event_for_date(event_date, _menu_for_tomorrow(request))
+
+    event = get_event(event_date)
+    if not event:
+        return JSONResponse({"error": "event_not_found"}, status_code=404)
+
+    return JSONResponse({
+        "date": event_date,
+        "breakfastPrice": float(event.get("breakfast_price", 2.5)),
+        "paymentMessage": "Le paiement se fera par Payconiq le jour du petit-déjeuner.",
+    })
+
+
+# -------------------------
+# Admin API - Breakfast price
+# -------------------------
+
 @router.get("/api/admin/breakfast-price")
 def api_admin_get_breakfast_price(request: Request):
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
+
     event_date = _tomorrow_str()
     ensure_event_for_date(event_date, _menu_for_tomorrow(request))
 
@@ -2505,8 +2665,13 @@ def api_admin_get_breakfast_price(request: Request):
         "breakfastPrice": float(event.get("breakfast_price", 2.5)),
     })
 
+
 @router.patch("/api/admin/breakfast-price")
 def api_admin_update_breakfast_price(request: Request, payload: dict = Body(...)):
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
+
     event_date = _tomorrow_str()
     ensure_event_for_date(event_date, _menu_for_tomorrow(request))
 
@@ -2534,25 +2699,3 @@ def api_admin_update_breakfast_price(request: Request, payload: dict = Body(...)
         "date": event_date,
         "breakfastPrice": float(event.get("breakfast_price", 2.5)),
     })
-
-@router.get("/api/employee/breakfast-info")
-def api_employee_breakfast_info(request: Request):
-    session_user = request.session.get("user")
-    if not session_user:
-        return JSONResponse({"error": "not_authenticated"}, status_code=401)
-
-    if session_user.get("role") != "utilisateur":
-        return JSONResponse({"error": "forbidden"}, status_code=403)
-
-    event_date = _tomorrow_str()
-    ensure_event_for_date(event_date, _menu_for_tomorrow(request))
-
-    event = get_event(event_date)
-    if not event:
-        return JSONResponse({"error": "event_not_found"}, status_code=404)
-
-    return JSONResponse({
-        "date": event_date,
-        "breakfastPrice": float(event.get("breakfast_price", 2.5)),
-        "paymentMessage": "Le paiement se fera par Payconiq le jour du petit-déjeuner.",
-    })    
