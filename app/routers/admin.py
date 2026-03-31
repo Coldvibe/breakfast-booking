@@ -2699,3 +2699,61 @@ def api_admin_update_breakfast_price(request: Request, payload: dict = Body(...)
         "date": event_date,
         "breakfastPrice": float(event.get("breakfast_price", 2.5)),
     })
+
+# -------------------------
+# Admin API - Cash
+# -------------------------
+
+from app.db import (
+    add_cash_transaction,
+    list_cash_transactions,
+    get_cash_balance,
+)
+
+
+@router.get("/api/admin/cash")
+def api_admin_cash_state(request: Request):
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
+
+    transactions = list_cash_transactions(limit=100)
+    balance = get_cash_balance()
+
+    return JSONResponse({
+        "balance": balance,
+        "transactions": transactions,
+    })
+
+
+@router.post("/api/admin/cash")
+def api_admin_add_cash_transaction(request: Request, payload: dict = Body(...)):
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
+
+    transaction_type = payload.get("type")
+    amount = payload.get("amount")
+    label = (payload.get("label") or "").strip()
+
+    if transaction_type not in ("income", "expense"):
+        return JSONResponse({"error": "invalid_type"}, status_code=400)
+
+    try:
+        amount_value = float(amount)
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "invalid_amount"}, status_code=400)
+
+    if amount_value <= 0:
+        return JSONResponse({"error": "invalid_amount"}, status_code=400)
+
+    add_cash_transaction(
+        transaction_date=date.today().isoformat(),
+        amount=amount_value,
+        transaction_type=transaction_type,
+        category="manual_income" if transaction_type == "income" else "manual_expense",
+        label=label,
+        reservation_id=None,
+    )
+
+    return JSONResponse({"success": True})    

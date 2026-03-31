@@ -72,7 +72,7 @@ export function LoginPage() {
         toast.error("Compte désactivé");
       } else if (error instanceof Error && error.message === "account_pending_approval") {
         setFormError("Votre compte est en attente de validation par un administrateur.");
-        toast.error("Compte en attente de validation");
+        toast.info("Compte en attente de validation");
       } else {
         setFormError("Une erreur est survenue lors de la connexion.");
         toast.error("Erreur de connexion");
