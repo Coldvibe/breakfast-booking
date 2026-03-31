@@ -610,3 +610,40 @@ export async function rejectUser(userId: string) {
 
   return response.json();
 }
+
+export async function fetchCashState() {
+  const response = await fetch("/api/admin/cash", {
+    credentials: "include",
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(data?.error || "Erreur chargement cash");
+  }
+
+  return data;
+}
+
+export async function addCashTransaction(payload: {
+  type: "income" | "expense";
+  amount: number;
+  label?: string;
+}) {
+  const response = await fetch("/api/admin/cash", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(data?.error || "Erreur ajout transaction");
+  }
+
+  return data;
+}
