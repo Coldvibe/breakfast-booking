@@ -65,6 +65,9 @@ from app.db import (
     delete_reservation_for_event_and_name,
     list_active_offers_for_date,
     list_reservations_with_lines,
+    list_pending_users,
+    approve_user,
+    reject_user,
     
 )
 
@@ -1912,6 +1915,7 @@ def api_admin_users_state(request: Request):
             "service": user["service"],
             "imageUrl": user["image_url"] or "",
             "isActive": bool(user["is_active"]),
+            "isApproved": bool(user["is_approved"]),
         })
 
     return JSONResponse({
@@ -1954,6 +1958,7 @@ def api_admin_create_user(request: Request, payload: dict = Body(...)):
             service=service,
             image_url=image_url,
             is_active=True,
+            is_approved=True,
         )
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -1978,6 +1983,7 @@ def api_admin_create_user(request: Request, payload: dict = Body(...)):
             "service": created_user["service"],
             "imageUrl": created_user["image_url"] or "",
             "isActive": bool(created_user["is_active"]),
+            "isApproved": bool(created_user["is_approved"]),
         },
     })
 
@@ -2013,6 +2019,7 @@ def api_admin_update_user_active(request: Request, user_id: int, payload: dict =
             "service": updated["service"],
             "imageUrl": updated["image_url"] or "",
             "isActive": bool(updated["is_active"]),
+            "isApproved": bool(updated["is_approved"]),
         },
     })
 
@@ -2083,9 +2090,67 @@ def api_admin_update_user(request: Request, user_id: int, payload: dict = Body(.
             "service": updated["service"],
             "imageUrl": updated["image_url"] or "",
             "isActive": bool(updated["is_active"]),
+            "isApproved": bool(updated["is_approved"]),
         },
     })
+@router.get("/api/admin/users/pending")
+def api_admin_pending_users(request: Request):
+    session_user = request.session.get("user")
 
+    if not session_user or session_user.get("role") != "admin":
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+
+    users = list_pending_users()
+
+    return JSONResponse({
+        "users": [
+            {
+                "id": f"u-{user['id']}",
+                "name": user["name"],
+                "email": user["email"],
+                "phone": user["phone"],
+                "role": user["role"],
+                "service": user["service"],
+                "imageUrl": user["image_url"] or "",
+                "isActive": bool(user["is_active"]),
+                "isApproved": bool(user["is_approved"]),
+                "createdAt": user["created_at"],
+            }
+            for user in users
+        ]
+    })
+@router.patch("/api/admin/users/{user_id}/approve")
+def api_admin_approve_user(request: Request, user_id: int):
+    session_user = request.session.get("user")
+
+    if not session_user or session_user.get("role") != "admin":
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+
+    users = list_users(active_only=False)
+    existing = next((u for u in users if u["id"] == user_id), None)
+
+    if not existing:
+        return JSONResponse({"error": "user_not_found"}, status_code=404)
+
+    approve_user(user_id, session_user["id"])
+
+    return JSONResponse({"success": True})   
+@router.patch("/api/admin/users/{user_id}/reject")
+def api_admin_reject_user(request: Request, user_id: int):
+    session_user = request.session.get("user")
+
+    if not session_user or session_user.get("role") != "admin":
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+
+    users = list_users(active_only=False)
+    existing = next((u for u in users if u["id"] == user_id), None)
+
+    if not existing:
+        return JSONResponse({"error": "user_not_found"}, status_code=404)
+
+    reject_user(user_id, session_user["id"])
+
+    return JSONResponse({"success": True})    
 @router.post("/api/auth/login")
 def api_auth_login(request: Request, payload: dict = Body(...)):
     email = (payload.get("email") or "").strip().lower()
@@ -2101,6 +2166,12 @@ def api_auth_login(request: Request, payload: dict = Body(...)):
 
     if not user:
         return JSONResponse({"error": "invalid_credentials"}, status_code=401)
+
+    if user.get("_auth_error") == "inactive":
+        return JSONResponse({"error": "inactive_account"}, status_code=403)
+
+    if user.get("_auth_error") == "not_approved":
+        return JSONResponse({"error": "account_pending_approval"}, status_code=403)
 
     request.session["user"] = {
         "id": user["id"],
@@ -2176,7 +2247,47 @@ def api_admin_reservations_state(request: Request):
             "sides": offers.get("sides", []),
         },
     })   
+@router.post("/api/auth/register")
+def api_auth_register(payload: dict = Body(...)):
+    name = (payload.get("name") or "").strip()
+    email = (payload.get("email") or "").strip().lower()
+    phone = (payload.get("phone") or "").strip()
+    password = payload.get("password") or ""
+    service = (payload.get("service") or "").strip()
 
+    if not name:
+        return JSONResponse({"error": "missing_name"}, status_code=400)
+
+    if not email:
+        return JSONResponse({"error": "missing_email"}, status_code=400)
+
+    if not password:
+        return JSONResponse({"error": "missing_password"}, status_code=400)
+
+    existing_users = list_users(active_only=False)
+    duplicate = next((u for u in existing_users if u["email"].strip().lower() == email), None)
+    if duplicate:
+        return JSONResponse({"error": "duplicate_email"}, status_code=409)
+
+    try:
+        add_user(
+            name=name,
+            email=email,
+            password_hash=_hash_password(password),
+            phone=phone,
+            role="utilisateur",
+            service=service,
+            image_url="",
+            is_active=True,
+            is_approved=False,
+        )
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+    return JSONResponse({
+        "success": True,
+        "message": "registration_pending",
+    })
 @router.post("/api/auth/logout")
 def api_auth_logout(request: Request):
     request.session.pop("user", None)
