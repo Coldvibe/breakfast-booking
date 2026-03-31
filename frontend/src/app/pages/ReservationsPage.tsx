@@ -95,8 +95,90 @@ export function ReservationsPage() {
   const mainTotals = Object.entries(data.totals.mains);
   const sideTotals = Object.entries(data.totals.sides);
 
-  const unpaidReservations = data.reservations.filter((reservation) => !reservation.isPaid);
-  const paidReservations = data.reservations.filter((reservation) => reservation.isPaid);
+  const unpaidReservations = data.reservations.filter(
+    (reservation) => !reservation.isPaid
+  );
+  const paidReservations = data.reservations.filter(
+    (reservation) => reservation.isPaid
+  );
+
+  const renderReservationLines = (reservation: Reservation) => {
+    if (reservation.lines.length === 0) {
+      return (
+        <div className="text-sm text-muted-foreground">
+          Aucun choix enregistré
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-2">
+        {reservation.lines.map((line, index) => (
+          <div
+            key={`${reservation.id}-${index}`}
+            className="flex items-center justify-between rounded-xl bg-muted/40 px-4 py-3 gap-3"
+          >
+            <div className="flex items-center gap-2 flex-wrap min-w-0">
+              <span className="break-words">{line.label}</span>
+              <Badge
+                variant={line.type === "MAIN" ? "default" : "secondary"}
+                className="rounded-full"
+              >
+                {line.type === "MAIN" ? "Plat" : "Accompagnement"}
+              </Badge>
+            </div>
+
+            <Badge variant="outline" className="rounded-full shrink-0">
+              x{line.qty}
+            </Badge>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderReservationCard = (reservation: Reservation, paid: boolean) => {
+    return (
+      <Card
+        key={reservation.id}
+        className={`rounded-2xl border-0 shadow-sm ${
+          paid ? "ring-1 ring-green-200" : ""
+        }`}
+      >
+        <CardContent className="p-4 space-y-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="font-semibold text-base break-words">
+                  {reservation.name}
+                </div>
+
+                {paid && <Badge className="rounded-full">Payé</Badge>}
+              </div>
+            </div>
+
+            <div className="w-full sm:w-auto">
+              <Button
+                size="sm"
+                variant={paid ? "outline" : "default"}
+                className="w-full sm:w-auto rounded-full"
+                disabled={loadingPaymentId === reservation.id}
+                onClick={() => handleTogglePaid(reservation.id, !paid)}
+              >
+                {loadingPaymentId === reservation.id
+                  ? "..."
+                  : paid
+                  ? "Annuler paiement"
+                  : "Marquer payé"}
+              </Button>
+            </div>
+          </div>
+
+          {renderReservationLines(reservation)}
+        </CardContent>
+      </Card>
+    );
+  };
 
   return (
     <div className="space-y-6 pb-20">
@@ -154,10 +236,10 @@ export function ReservationsPage() {
                 {data.offers.mains.map((item) => (
                   <div
                     key={item.id}
-                    className="flex items-center justify-between rounded-xl bg-muted/40 px-4 py-3"
+                    className="flex items-center justify-between rounded-xl bg-muted/40 px-4 py-3 gap-3"
                   >
-                    <span className="font-medium">{item.label}</span>
-                    <Badge variant="outline" className="rounded-full">
+                    <span className="font-medium break-words">{item.label}</span>
+                    <Badge variant="outline" className="rounded-full shrink-0">
                       Max {item.max_per_person}/pers
                     </Badge>
                   </div>
@@ -180,10 +262,10 @@ export function ReservationsPage() {
                 {data.offers.sides.map((item) => (
                   <div
                     key={item.id}
-                    className="flex items-center justify-between rounded-xl bg-muted/40 px-4 py-3"
+                    className="flex items-center justify-between rounded-xl bg-muted/40 px-4 py-3 gap-3"
                   >
-                    <span className="font-medium">{item.label}</span>
-                    <Badge variant="outline" className="rounded-full">
+                    <span className="font-medium break-words">{item.label}</span>
+                    <Badge variant="outline" className="rounded-full shrink-0">
                       Max {item.max_per_person}/pers
                     </Badge>
                   </div>
@@ -214,10 +296,10 @@ export function ReservationsPage() {
                 {mainTotals.map(([label, qty]) => (
                   <div
                     key={label}
-                    className="flex items-center justify-between rounded-xl bg-muted/40 px-4 py-3"
+                    className="flex items-center justify-between rounded-xl bg-muted/40 px-4 py-3 gap-3"
                   >
-                    <span>{label}</span>
-                    <Badge className="rounded-full">{qty}</Badge>
+                    <span className="break-words">{label}</span>
+                    <Badge className="rounded-full shrink-0">{qty}</Badge>
                   </div>
                 ))}
               </div>
@@ -238,10 +320,10 @@ export function ReservationsPage() {
                 {sideTotals.map(([label, qty]) => (
                   <div
                     key={label}
-                    className="flex items-center justify-between rounded-xl bg-muted/40 px-4 py-3"
+                    className="flex items-center justify-between rounded-xl bg-muted/40 px-4 py-3 gap-3"
                   >
-                    <span>{label}</span>
-                    <Badge className="rounded-full">{qty}</Badge>
+                    <span className="break-words">{label}</span>
+                    <Badge className="rounded-full shrink-0">{qty}</Badge>
                   </div>
                 ))}
               </div>
@@ -278,53 +360,9 @@ export function ReservationsPage() {
                   </CardContent>
                 </Card>
               ) : (
-                unpaidReservations.map((reservation) => (
-                  <Card key={reservation.id} className="rounded-2xl border-0 shadow-sm">
-                    <CardContent className="p-4 space-y-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="font-semibold text-base">{reservation.name}</div>
-
-                        <Button
-                          size="sm"
-                          className="rounded-full"
-                          disabled={loadingPaymentId === reservation.id}
-                          onClick={() => handleTogglePaid(reservation.id, true)}
-                        >
-                          {loadingPaymentId === reservation.id ? "..." : "Marquer payé"}
-                        </Button>
-                      </div>
-
-                      {reservation.lines.length === 0 ? (
-                        <div className="text-sm text-muted-foreground">
-                          Aucun choix enregistré
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {reservation.lines.map((line, index) => (
-                            <div
-                              key={`${reservation.id}-${index}`}
-                              className="flex items-center justify-between rounded-xl bg-muted/40 px-4 py-3"
-                            >
-                              <div className="flex items-center gap-2">
-                                <span>{line.label}</span>
-                                <Badge
-                                  variant={line.type === "MAIN" ? "default" : "secondary"}
-                                  className="rounded-full"
-                                >
-                                  {line.type === "MAIN" ? "Plat" : "Accompagnement"}
-                                </Badge>
-                              </div>
-
-                              <Badge variant="outline" className="rounded-full">
-                                x{line.qty}
-                              </Badge>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))
+                unpaidReservations.map((reservation) =>
+                  renderReservationCard(reservation, false)
+                )
               )}
             </div>
 
@@ -343,60 +381,9 @@ export function ReservationsPage() {
                   </CardContent>
                 </Card>
               ) : (
-                paidReservations.map((reservation) => (
-                  <Card
-                    key={reservation.id}
-                    className="rounded-2xl border-0 shadow-sm ring-1 ring-green-200"
-                  >
-                    <CardContent className="p-4 space-y-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <div className="font-semibold text-base">{reservation.name}</div>
-                          <Badge className="rounded-full">Payé</Badge>
-                        </div>
-
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="rounded-full"
-                          disabled={loadingPaymentId === reservation.id}
-                          onClick={() => handleTogglePaid(reservation.id, false)}
-                        >
-                          {loadingPaymentId === reservation.id ? "..." : "Annuler paiement"}
-                        </Button>
-                      </div>
-
-                      {reservation.lines.length === 0 ? (
-                        <div className="text-sm text-muted-foreground">
-                          Aucun choix enregistré
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {reservation.lines.map((line, index) => (
-                            <div
-                              key={`${reservation.id}-${index}`}
-                              className="flex items-center justify-between rounded-xl bg-muted/40 px-4 py-3"
-                            >
-                              <div className="flex items-center gap-2">
-                                <span>{line.label}</span>
-                                <Badge
-                                  variant={line.type === "MAIN" ? "default" : "secondary"}
-                                  className="rounded-full"
-                                >
-                                  {line.type === "MAIN" ? "Plat" : "Accompagnement"}
-                                </Badge>
-                              </div>
-
-                              <Badge variant="outline" className="rounded-full">
-                                x{line.qty}
-                              </Badge>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))
+                paidReservations.map((reservation) =>
+                  renderReservationCard(reservation, true)
+                )
               )}
             </div>
           </div>
