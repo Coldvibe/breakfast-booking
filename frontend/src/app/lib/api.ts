@@ -402,6 +402,29 @@ export async function loginUser(email: string, password: string) {
 
   return data;
 }
+export async function registerUser(payload: {
+  name: string;
+  email: string;
+  password: string;
+  phone?: string;
+  service?: string;
+}) {
+  const res = await fetch("/api/auth/register", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    throw new Error(data?.error || "register_failed");
+  }
+
+  return data;
+}
 export async function fetchMe() {
   const response = await fetch("/api/auth/me", {
     credentials: "include",

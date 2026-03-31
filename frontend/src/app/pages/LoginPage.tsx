@@ -164,6 +164,16 @@ export function LoginPage() {
                 <LogIn className="size-4 mr-2" />
                 {isSubmitting ? "Connexion..." : "Se connecter"}
               </Button>
+              <div className="text-center text-sm text-muted-foreground mt-4">
+                Pas encore de compte ?{" "}
+                <button
+                  type="button"
+                  onClick={() => navigate("/register")}
+                  className="text-primary font-medium hover:underline"
+                >
+                  Créer un compte
+                </button>
+              </div>
             </form>
           </CardContent>
         </Card>
