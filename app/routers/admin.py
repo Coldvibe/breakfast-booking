@@ -65,6 +65,9 @@ from app.db import (
     delete_reservation_for_event_and_name,
     list_active_offers_for_date,
     list_reservations_with_lines,
+    get_reservation_by_id,
+    mark_reservation_paid,
+    mark_reservation_unpaid,
 )
 
 router = APIRouter()
@@ -2417,9 +2420,10 @@ def api_admin_reservations_state(request: Request):
             })
 
         frontend_reservations.append({
-            "id": f"res-{index}",
+            "id": f"res-{reservation.get('id')}",
             "name": reservation.get("name") or "Inconnu",
             "lines": frontend_lines,
+            "isPaid": bool(reservation.get("is_paid", False)),
         })
 
     return JSONResponse({
@@ -2437,7 +2441,42 @@ def api_admin_reservations_state(request: Request):
         },
     })
 
+@router.patch("/api/admin/reservations/{reservation_id}/paid")
+def api_admin_toggle_reservation_paid(
+    request: Request,
+    reservation_id: int,
+    payload: dict = Body(...),
+):
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
 
+    is_paid = payload.get("isPaid", None)
+
+    if is_paid is None:
+        return JSONResponse({"error": "missing_is_paid"}, status_code=400)
+
+    reservation = get_reservation_by_id(reservation_id)
+    if not reservation:
+        return JSONResponse({"error": "reservation_not_found"}, status_code=404)
+
+    try:
+        if bool(is_paid):
+            mark_reservation_paid(reservation_id)
+        else:
+            mark_reservation_unpaid(reservation_id)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+    updated = get_reservation_by_id(reservation_id)
+
+    return JSONResponse({
+        "success": True,
+        "reservation": {
+            "id": f"res-{updated['id']}",
+            "isPaid": bool(updated["is_paid"]),
+        },
+    })
 # -------------------------
 # Employee API
 # -------------------------

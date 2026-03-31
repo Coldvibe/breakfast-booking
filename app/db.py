@@ -52,6 +52,15 @@ def init_db() -> None:
             );
             """
         )
+        try:
+            conn.execute("ALTER TABLE reservations ADD COLUMN is_paid INTEGER NOT NULL DEFAULT 0")
+        except Exception:
+            pass
+
+        try:
+            conn.execute("ALTER TABLE reservations ADD COLUMN paid_at TEXT")
+        except Exception:
+            pass
 
         conn.execute(
             """
@@ -974,6 +983,8 @@ def list_reservations_with_lines(event_id: int) -> list[dict]:
               r.id AS reservation_id,
               r.name,
               r.bring,
+              r.is_paid,
+              r.paid_at,
               rl.qty,
               o.offer_type,
               COALESCE(rec.name, f.name) AS label
@@ -994,7 +1005,14 @@ def list_reservations_with_lines(event_id: int) -> list[dict]:
     for row in rows:
         rid = row["reservation_id"]
         if rid not in by_id:
-            by_id[rid] = {"name": row["name"], "bring": row["bring"] or "", "lines": []}
+            by_id[rid] = {
+                "id": rid,
+                "name": row["name"],
+                "bring": row["bring"] or "",
+                "is_paid": bool(row["is_paid"]),
+                "paid_at": row["paid_at"],
+                "lines": [],
+            }
             out.append(by_id[rid])
 
         if row["label"] is not None and row["qty"] is not None:
@@ -1355,3 +1373,151 @@ def get_cash_balance() -> float:
         ).fetchone()
 
     return float(row["balance"] or 0)
+def get_reservation_by_id(reservation_id: int) -> Optional[Dict[str, Any]]:
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT
+                r.id,
+                r.event_id,
+                r.name,
+                r.bring,
+                r.is_paid,
+                r.paid_at,
+                e.event_date,
+                e.breakfast_price
+            FROM reservations r
+            JOIN events e ON e.id = r.event_id
+            WHERE r.id = ?
+            LIMIT 1
+            """,
+            (reservation_id,),
+        ).fetchone()
+
+        if not row:
+            return None
+
+        return {
+            "id": row["id"],
+            "event_id": row["event_id"],
+            "name": row["name"],
+            "bring": row["bring"] or "",
+            "is_paid": bool(row["is_paid"]),
+            "paid_at": row["paid_at"],
+            "event_date": row["event_date"],
+            "breakfast_price": float(row["breakfast_price"] or 0),
+        }
+
+
+def reservation_payment_transaction_exists(reservation_id: int) -> bool:
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT 1
+            FROM cash_transactions
+            WHERE reservation_id = ?
+              AND category = 'reservation_payment'
+            LIMIT 1
+            """,
+            (reservation_id,),
+        ).fetchone()
+        return row is not None
+
+
+def mark_reservation_paid(reservation_id: int) -> None:
+    with get_conn() as conn:
+        reservation = conn.execute(
+            """
+            SELECT
+                r.id,
+                r.name,
+                r.is_paid,
+                e.event_date,
+                e.breakfast_price
+            FROM reservations r
+            JOIN events e ON e.id = r.event_id
+            WHERE r.id = ?
+            LIMIT 1
+            """,
+            (reservation_id,),
+        ).fetchone()
+
+        if not reservation:
+            raise ValueError("Reservation not found")
+
+        conn.execute(
+            """
+            UPDATE reservations
+            SET is_paid = 1,
+                paid_at = datetime('now')
+            WHERE id = ?
+            """,
+            (reservation_id,),
+        )
+
+        existing_tx = conn.execute(
+            """
+            SELECT id
+            FROM cash_transactions
+            WHERE reservation_id = ?
+              AND category = 'reservation_payment'
+            LIMIT 1
+            """,
+            (reservation_id,),
+        ).fetchone()
+
+        if not existing_tx:
+            conn.execute(
+                """
+                INSERT INTO cash_transactions (
+                    transaction_date,
+                    amount,
+                    transaction_type,
+                    category,
+                    label,
+                    reservation_id
+                )
+                VALUES (?, ?, 'income', 'reservation_payment', ?, ?)
+                """,
+                (
+                    reservation["event_date"],
+                    float(reservation["breakfast_price"] or 0),
+                    f"Paiement réservation - {reservation['name']}",
+                    reservation_id,
+                ),
+            )
+
+
+def mark_reservation_unpaid(reservation_id: int) -> None:
+    with get_conn() as conn:
+        reservation = conn.execute(
+            """
+            SELECT id
+            FROM reservations
+            WHERE id = ?
+            LIMIT 1
+            """,
+            (reservation_id,),
+        ).fetchone()
+
+        if not reservation:
+            raise ValueError("Reservation not found")
+
+        conn.execute(
+            """
+            UPDATE reservations
+            SET is_paid = 0,
+                paid_at = NULL
+            WHERE id = ?
+            """,
+            (reservation_id,),
+        )
+
+        conn.execute(
+            """
+            DELETE FROM cash_transactions
+            WHERE reservation_id = ?
+              AND category = 'reservation_payment'
+            """,
+            (reservation_id,),
+        )
