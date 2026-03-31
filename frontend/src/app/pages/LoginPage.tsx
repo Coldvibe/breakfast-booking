@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
+import { useApp } from "../context/AppContext";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -17,13 +18,16 @@ export function LoginPage() {
   const [formError, setFormError] = useState("");
 
   const { setUser } = useAuth();
+  const { setIsAuthenticated, loadBackendState } = useApp();
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError("");
 
-    if (!email.trim()) {
+    const cleanEmail = email.trim();
+
+    if (!cleanEmail) {
       setFormError("Veuillez renseigner votre email.");
       toast.error("Email requis");
       return;
@@ -38,8 +42,11 @@ export function LoginPage() {
     try {
       setIsSubmitting(true);
 
-      const data = await loginUser(email.trim(), password);
+      const data = await loginUser(cleanEmail, password);
+
       setUser(data.user);
+      setIsAuthenticated(true);
+      await loadBackendState();
 
       toast.success("Connexion réussie");
 
@@ -60,6 +67,12 @@ export function LoginPage() {
       } else if (error instanceof Error && error.message === "missing_password") {
         setFormError("Veuillez renseigner votre mot de passe.");
         toast.error("Mot de passe manquant");
+      } else if (error instanceof Error && error.message === "inactive_account") {
+        setFormError("Votre compte est désactivé.");
+        toast.error("Compte désactivé");
+      } else if (error instanceof Error && error.message === "account_pending_approval") {
+        setFormError("Votre compte est en attente de validation par un administrateur.");
+        toast.error("Compte en attente de validation");
       } else {
         setFormError("Une erreur est survenue lors de la connexion.");
         toast.error("Erreur de connexion");
@@ -104,6 +117,7 @@ export function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   className="rounded-xl"
                   disabled={isSubmitting}
+                  autoComplete="email"
                 />
               </div>
 
@@ -119,6 +133,7 @@ export function LoginPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     className="rounded-xl pr-12"
                     disabled={isSubmitting}
+                    autoComplete="current-password"
                   />
 
                   <button
@@ -130,6 +145,7 @@ export function LoginPage() {
                         ? "Masquer le mot de passe"
                         : "Afficher le mot de passe"
                     }
+                    disabled={isSubmitting}
                   >
                     {isPasswordVisible ? (
                       <EyeOff className="size-4" />
