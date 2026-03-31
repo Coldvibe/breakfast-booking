@@ -647,3 +647,48 @@ export async function addCashTransaction(payload: {
 
   return data;
 }
+
+export async function updateReservationPaid(reservationId: string, isPaid: boolean) {
+  const numericId = Number(reservationId.replace("res-", ""));
+
+  const response = await fetch(`/api/admin/reservations/${numericId}/paid`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify({ isPaid }),
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || data?.detail || "Impossible de mettre à jour le paiement."
+    );
+  }
+
+  return data;
+}
+export async function toggleReservationPaid(reservationId: string, isPaid: boolean) {
+  const numericId = Number(reservationId.replace("res-", ""));
+
+  const response = await fetch(`/api/admin/reservations/${numericId}/paid`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify({ isPaid }),
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || data?.detail || "Impossible de modifier le statut de paiement."
+    );
+  }
+
+  return data;
+}
