@@ -692,3 +692,19 @@ export async function toggleReservationPaid(reservationId: string, isPaid: boole
 
   return data;
 }
+
+export async function fetchStockCheck() {
+  const response = await fetch("/api/admin/stock-check", {
+    credentials: "include",
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || data?.detail || "Impossible de charger l’état du stock."
+    );
+  }
+
+  return data;
+}
