@@ -2812,8 +2812,26 @@ def api_admin_stock_check(request: Request):
 
     stock_check = get_stock_requirements_for_event(event_date)
 
+    normalized_items = []
+    for item in stock_check.get("items", []):
+        stock_value = float(item.get("stock", 0) or 0)
+        required_value = float(
+            item.get("required", item.get("required_qty", item.get("needed", 0))) or 0
+        )
+        missing_value = float(item.get("missing", max(required_value - stock_value, 0)) or 0)
+
+        normalized_items.append({
+            "foodId": item.get("food_id", item.get("foodId")),
+            "name": item.get("name", ""),
+            "unit": item.get("unit", "unit"),
+            "stock": stock_value,
+            "required": required_value,
+            "missing": missing_value,
+            "shortage": bool(item.get("shortage", missing_value > 0)),
+        })
+
     return JSONResponse({
         "eventDate": stock_check.get("event_date"),
         "hasShortage": bool(stock_check.get("has_shortage", False)),
-        "items": stock_check.get("items", []),
+        "items": normalized_items,
     })
