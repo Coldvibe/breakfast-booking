@@ -22,6 +22,7 @@ from app.db import (
     update_event_flags,
     set_event_planned,
     set_event_breakfast_price,
+    get_stock_requirements_for_event,
     # agents
     list_agents,
     add_agent,
@@ -2796,3 +2797,23 @@ def api_admin_add_cash_transaction(request: Request, payload: dict = Body(...)):
     )
 
     return JSONResponse({"success": True})    
+# -------------------------
+# Admin API - stock check
+# -------------------------
+
+@router.get("/api/admin/stock-check")
+def api_admin_stock_check(request: Request):
+    guard = _require_api_admin(request)
+    if guard:
+        return guard
+
+    event_date = _tomorrow_str()
+    ensure_event_for_date(event_date, _menu_for_tomorrow(request))
+
+    stock_check = get_stock_requirements_for_event(event_date)
+
+    return JSONResponse({
+        "eventDate": stock_check.get("event_date"),
+        "hasShortage": bool(stock_check.get("has_shortage", False)),
+        "items": stock_check.get("items", []),
+    })
